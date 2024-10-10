@@ -150,3 +150,13 @@ ggplot(pop1, aes(x=day, y=count, group=idFact, color=idFact)) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
 
 ```
+
+```{r, stockmath, echo=TRUE}
+
+rpermL <- 50 / 0.3
+
+rperstock <- rpermL * 100
+
+cultPerStock <- rperstock / 200
+
+```
