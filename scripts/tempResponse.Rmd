@@ -1,0 +1,43 @@
+---
+title: "Rotifer response to temperature"
+author: "Alex Mendelson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggplot2)
+```
+
+```{r data}
+data <- read.csv("../data/tempRes2.csv")
+
+data$cloneID <- paste(data$Site, data$Leaf, data$Clone, sep="-")
+
+data$Site <- as.factor(data$Site)
+data$Leaf <- as.factor(data$Leaf)
+data$Treatment <- as.factor(data$Treatment)
+data$Clone <- as.factor(data$Clone)
+data$cloneID <- as.factor(data$cloneID)
+```
+
+
+
+```{r growthCurves}
+growthGraphData <- data %>%
+  group_by(Day, Treatment, Site, Leaf, cloneID) %>%
+  summarise(
+    avgCount = mean(Count),
+    SE = sd(Count)/sqrt(n())
+  )
+
+ggplot(growthGraphData, aes(x = Day, y = avgCount, color = Treatment, group = cloneID)) +
+  geom_point() +
+  geom_line() +
+  geom_errorbar(aes(ymin = (avgCount - SE), ymax = (avgCount + SE), width = 0.8)) +
+  facet_grid(Site~Treatment)
+
+```
