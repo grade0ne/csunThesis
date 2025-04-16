@@ -10,6 +10,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(ggplot2)
+library(growthrates)
+library(lme4)
+library(performance)
+
 ```
 
 ## Data import and factoring
@@ -76,8 +80,79 @@ ggplot(cloneAvg, aes(x = Day, y = avgCount, color = Treatment, group = interacti
 
 ## Growth rates
 
+Folllowing this tutorial:
+https://cran.r-project.org/web/packages/growthrates/vignettes/Introduction.html
+
 ```{r grothRatesData}
 
+rateData <- data.frame(
+  site = data$Site,
+  leaf = data$Leaf,
+  clone = data$Clone,
+  replicate = data$ID,
+  time = data$Day,
+  count = data$Count
+)
+
+rateData <- rateData %>%
+  mutate(
+    replicate = as.integer(substr(replicate, nchar(replicate), nchar(replicate))),
+    count1 = count + 1
+  )
 
 
+# splitting data up
+splitData <- multisplit(rateData, c("site", "leaf", "clone", "replicate"))
+
+# Testing with single data sets with the 'Easy Linear Method', adapted from Hall et al. 2014:
+
+# separate out only one replicate (site C, leaf 1, clone 1, rep 1)
+dat <- splitData[[1]]
+
+fit <- fit_easylinear(dat$time, dat$count +1)
+
+summary(fit)
+
+coef(fit) # exponential growth parameters
+
+plot(fit, log = "y") # log-transformed data used in 'fit'
+plot(fit) # re-transformed to original
+
+# nonparametric smoothing splines for MAX GROWTH
+dat <- splitData[[1]]
+time <- dat$time
+y <- dat$count +1
+
+res <- fit_spline(time, y)
+
+
+plot(res, log = "y")
+plot(res)
+
+# easy linear for all replicates
+manyEasyFits <- all_easylinear(count1 ~ time | site + leaf + clone + replicate, data = rateData)
+
+easyFitResults <- as.data.frame(coef(manyEasyFits))
+
+easyFitResults <- easyFitResults %>%
+    rownames_to_column(var = "id") %>%
+    separate(id, into = c("site", "leaf", "clone", "replicate"), sep = ":", convert = TRUE) %>%
+    mutate(
+      treatment = case_when(
+        replicate %in% c(1, 2, 3) ~ "low",
+        replicate %in% c(4, 5, 6) ~ "high"
+      )
+    )
+  
+
+model1 <- lmer(mumax ~ treatment + site + (1|leaf) + (1|clone) + (1|replicate), data = easyFitResults)
+
+plot(model1)
+
+qqnorm(residuals(model1))
+qqline(residuals(model1))
+
+check_model(model1)
+
+summary(model1)
 ```
