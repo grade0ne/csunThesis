@@ -13,6 +13,7 @@ library(ggplot2)
 library(growthrates)
 library(lme4)
 library(car)
+library(performance)
 
 ```
 
@@ -176,7 +177,8 @@ rateAvgPlot <- easyFitResults %>%
   group_by(treatment) %>%
   summarise(
     mean = mean(mumax),
-    SE = sd(mumax) / sqrt(n())
+    SE = sd(mumax) / sqrt(n()),
+    site = site
   )
 
 ggplot(rateAvgPlot, aes(x = treatment, y = mean, fill = treatment)) +
@@ -193,9 +195,59 @@ ggplot(rateAvgPlot, aes(x = treatment, y = mean, fill = treatment)) +
     legend.position = "none"
   )
 
+rateAvgSite <- easyFitResults %>%
+  group_by(treatment, site) %>%
+  summarise(
+    mean = mean(mumax),
+    SE = sd(mumax) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(rateAvgSite, aes(x = treatment, y = mean, fill = site)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.6), width = 0.5) +
+  geom_errorbar(aes(ymin = mean - SE, ymax = mean + SE),
+                position = position_dodge(width = 0.6), width = 0.25) +
+  ylab("Maximum growth rate (μmax)") +
+  xlab("Temperature treatment") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    strip.background = element_rect(fill = "gray90", color = NA),
+    plot.caption = element_text(hjust = 0)
+  )
+
+rateAvgSite <- easyFitResults %>%
+  group_by(site) %>%
+  summarise(
+    mean = mean(mumax),
+    SE = sd(mumax) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(rateAvgSite, aes(x = site, y = mean, fill = site)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  geom_errorbar(aes(ymin = mean - SE, ymax = mean + SE), width = 0.25) +
+  ylab("Maximum growth rate (μmax)") +
+  xlab("Site") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+    strip.background = element_rect(fill = "gray90", color = NA),
+    plot.caption = element_text(hjust = 0),
+    legend.position = "none"
+  )
+
 ```
 
 ```{r lmer}
+
+easyFitResults$site <- as.factor(easyFitResults$site)
+easyFitResults$leaf <- as.factor(easyFitResults$leaf)
+easyFitResults$clone <- as.factor(easyFitResults$clone)
+easyFitResults$replicate <- as.factor(easyFitResults$replicate)
+easyFitResults$treatment <- as.factor(easyFitResults$treatment)
 
 model1 <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone), data = easyFitResults)
 
@@ -206,5 +258,103 @@ qqline(residuals(model1))
 
 summary(model1)
 
+varcomps <- VarCorr(model1)
+print(varcomps, comp = "Variance", digits = 22)
+
 Anova(model1)
+
+# nested
+
+model2 <- lmer(mumax ~ treatment + (1|site) + (1|site:leaf) + (1|site:leaf:clone), data = easyFitResults)
+
+summary(model2)
+
+# nested steve style
+
+model3 <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone) + (1|site:leaf) + (1|leaf:clone) +(1|site:clone) + (1|site:leaf:clone), data = easyFitResults)
+
+summary(model3)
+```
+
+# Test with some fake data. Counts in Pleaphase site 1.5x
+
+```{r highVarTest}
+
+fakeData <- read.csv("../data/tempRes2_highSiteVariance.csv")
+
+fakeData$cloneID <- paste(fakeData$Site, fakeData$Leaf, fakeData$Clone, sep="-")
+
+fakeData$Site <- as.factor(fakeData$Site)
+fakeData$Leaf <- as.factor(fakeData$Leaf)
+fakeData$Treatment <- as.factor(fakeData$Treatment)
+fakeData$Clone <- as.factor(fakeData$Clone)
+fakeData$cloneID <- as.factor(fakeData$cloneID)
+
+fakeRateData <- data.frame(
+  site = fakeData$Site,
+  leaf = fakeData$Leaf,
+  clone = fakeData$Clone,
+  replicate = fakeData$ID,
+  time = fakeData$Day,
+  count = fakeData$Count
+)
+
+fakeRateData <- fakeRateData %>%
+  mutate(
+    replicate = as.integer(substr(replicate, nchar(replicate), nchar(replicate))),
+    count1 = count + 1
+  )
+
+fakeManyEasyFits <- all_easylinear(count1 ~ time | site + leaf + clone + replicate, data = fakeRateData)
+
+# fit model results built into data frame
+# Assigned new treatment column based on replicate #
+
+fakeEasyFitResults <- as.data.frame(coef(fakeManyEasyFits))
+
+fakeEasyFitResults <- fakeEasyFitResults %>%
+    rownames_to_column(var = "id") %>%
+    separate(id, into = c("site", "leaf", "clone", "replicate"), sep = ":", convert = TRUE) %>%
+    mutate(
+      treatment = case_when(
+        replicate %in% c(1, 2, 3) ~ "low",
+        replicate %in% c(4, 5, 6) ~ "high"
+      )
+    )
+
+fakeModel1 <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone), data = fakeEasyFitResults)
+
+summary(fakeModel1)
+```
+
+# LRT & ICC (with real data)
+Prereq: chunk8 - fullRateEstimates
+
+```{r LRT & ICC}
+
+model1_full <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone), data = easyFitResults)
+
+model1_reduced <- lmer(mumax ~ treatment + (1|leaf) + (1|clone), data = easyFitResults)
+
+# LRT:
+anova(model1_full, model1_reduced)
+# p = 1; remove site
+
+icc(model1_reduced)
+
+ggplot(easyFitResults, aes(x = site, y = mumax)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_jitter(width = 0.1, alpha = 0.5) +
+  ylab("Maximum Growth Rate (μmax)") +
+  xlab("Site") +
+  theme_minimal()
+
+```
+
+```{r explicitNesting}
+
+model4 <- lmer(mumax ~ treatment + (1|site/leaf/clone), data = easyFitResults)
+summary(model4)
+plot(model4)
+qqp(resid(model4))
 ```
