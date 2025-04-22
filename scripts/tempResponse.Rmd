@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(ggplot2)
@@ -17,9 +18,10 @@ library(performance)
 
 ```
 
+
 ## Data import and factoring
 
-```{r dataImport, include = TRUE}
+```{r dataImport, include = FALSE}
 data <- read.csv("../data/tempRes2.csv")
 
 data$cloneID <- paste(data$Site, data$Leaf, data$Clone, sep="-")
@@ -33,7 +35,10 @@ data$cloneID <- as.factor(data$cloneID)
 
 ## Growth curves
 
-```{r growthCurveData, echo = FALSE}
+```{r growthCurveData, echo = FALSE, include = FALSE}
+rawClone <- data %>%
+  group_by(Day, Treatment, Site, cloneID)
+
 cloneAvg <- data %>%
   group_by(Day, Treatment, Site, cloneID) %>%
   summarise(
@@ -42,14 +47,29 @@ cloneAvg <- data %>%
   )
 ```
 
-```{r growthCurveCombined}
+```{r growthCurveCombined, echo = FALSE}
+# all clones not averaged
+
+ggplot(rawClone, aes(x = Day, y = Count, color = Treatment, group = interaction(cloneID, Treatment, Site))) +
+  geom_point(position = position_dodge(0.85)) +
+  labs(y = "Rotifer Abundance", x = "Day", caption = "Figure 1. Rotifer counts over time in 2 temps") +
+  scale_x_continuous(breaks = seq(3, 30, by = 3)) +
+  scale_color_manual(values = c("25C" = "blue", "30C" = "red")) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),            
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),  
+    strip.background = element_rect(fill = "gray90", color = NA), 
+    plot.caption = element_text(hjust = 0)  
+  )
+
 # avg counts all clones one plot
 
 ggplot(cloneAvg, aes(x = Day, y = avgCount, color = Treatment, group = interaction(cloneID, Treatment, Site))) +
   geom_point() +
   geom_line() +
   labs(y = "Rotifer Abundance", x = "Day", caption = "Figure 1. Average counts over time in 2 temps, pooled clones") +
-  scale_x_continuous(breaks = seq(3, 24, by = 3)) +
+  scale_x_continuous(breaks = seq(3, 30, by = 3)) +
   scale_color_manual(values = c("25C" = "blue", "30C" = "red")) +
   theme_minimal() +
   theme(
@@ -60,14 +80,14 @@ ggplot(cloneAvg, aes(x = Day, y = avgCount, color = Treatment, group = interacti
   )
 ```
 
-```{r growthCurveIndiv}
+```{r growthCurveIndiv, echo = FALSE}
 # avg counts (+/- SE) over time in 2 temps (color) wrapped by cloneID
 
 ggplot(cloneAvg, aes(x = Day, y = avgCount, color = Treatment, group = interaction(cloneID, Treatment, Site))) +
   geom_point() +
   geom_line() +
   labs(y = "Rotifer Abundance", x = "Day", caption = "Figure 2. Average counts (+/- SE) over time in 2 temps (color) wrapped by cloneID") +
-  scale_x_continuous(breaks = seq(3, 24, by = 3)) +
+  scale_x_continuous(breaks = seq(3, 30, by = 6)) +
   scale_color_manual(values = c("25C" = "blue", "30C" = "red")) +
   geom_errorbar(aes(ymin = avgCount - SE, ymax = avgCount + SE), width = 0.2, alpha = 0.6) +
   theme_minimal() +
@@ -81,12 +101,12 @@ ggplot(cloneAvg, aes(x = Day, y = avgCount, color = Treatment, group = interacti
 
 ```
 
-## Growth rates
+## Extracting gowth rates
 
-Folllowing this tutorial:
+Following this tutorial:
 https://cran.r-project.org/web/packages/growthrates/vignettes/Introduction.html
 
-```{r grothRatesData}
+```{r grothRatesData, include = FALSE, echo = FALSE}
 
 rateData <- data.frame(
   site = data$Site,
@@ -104,7 +124,7 @@ rateData <- rateData %>%
   )
 ```
 
-```{r rateTesting}
+```{r packageTesting, include = FALSE, echo = FALSE}
 # splitting data up
 splitData <- multisplit(rateData, c("site", "leaf", "clone", "replicate"))
 
@@ -134,7 +154,7 @@ plot(res, log = "y")
 plot(res)
 ```
 
-```{r fullRateEstimates}
+```{r fullRateEstimates, include = FALSE, echo = FALSE}
 # easy linear for ALL replicates
 
 manyEasyFits <- all_easylinear(count1 ~ time | site + leaf + clone + replicate, data = rateData)
@@ -167,10 +187,11 @@ for (i in plot_indices) {
   title(main = paste("Treatment:", this_treatment), cex.main = 1)
 }
 
-
 ```
 
-```{r mumaxComparison}
+# Maximum growth rate (μmax)
+
+```{r mumaxComparison, echo = FALSE}
 # mumax (maximum growth rate) values by treatment
 
 rateAvgPlot <- easyFitResults %>%
@@ -195,27 +216,27 @@ ggplot(rateAvgPlot, aes(x = treatment, y = mean, fill = treatment)) +
     legend.position = "none"
   )
 
-rateAvgSite <- easyFitResults %>%
-  group_by(treatment, site) %>%
-  summarise(
-    mean = mean(mumax),
-    SE = sd(mumax) / sqrt(n()),
-    .groups = "drop"
-  )
-
-ggplot(rateAvgSite, aes(x = treatment, y = mean, fill = site)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.6), width = 0.5) +
-  geom_errorbar(aes(ymin = mean - SE, ymax = mean + SE),
-                position = position_dodge(width = 0.6), width = 0.25) +
-  ylab("Maximum growth rate (μmax)") +
-  xlab("Temperature treatment") +
-  theme_minimal() +
-  theme(
-    panel.grid = element_blank(),
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
-    strip.background = element_rect(fill = "gray90", color = NA),
-    plot.caption = element_text(hjust = 0)
-  )
+# rateAvgSite <- easyFitResults %>%
+#   group_by(treatment, site) %>%
+#   summarise(
+#     mean = mean(mumax),
+#     SE = sd(mumax) / sqrt(n()),
+#     .groups = "drop"
+#   )
+# 
+# ggplot(rateAvgSite, aes(x = treatment, y = mean, fill = site)) +
+#   geom_bar(stat = "identity", position = position_dodge(width = 0.6), width = 0.5) +
+#   geom_errorbar(aes(ymin = mean - SE, ymax = mean + SE),
+#                 position = position_dodge(width = 0.6), width = 0.25) +
+#   ylab("Maximum growth rate (μmax)") +
+#   xlab("Temperature treatment") +
+#   theme_minimal() +
+#   theme(
+#     panel.grid = element_blank(),
+#     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),
+#     strip.background = element_rect(fill = "gray90", color = NA),
+#     plot.caption = element_text(hjust = 0)
+#   )
 
 rateAvgSite <- easyFitResults %>%
   group_by(site) %>%
@@ -241,7 +262,9 @@ ggplot(rateAvgSite, aes(x = site, y = mean, fill = site)) +
 
 ```
 
-```{r lmer}
+# Model Selection
+
+```{r modelTesting, include = FALSE, echo = FALSE}
 
 easyFitResults$site <- as.factor(easyFitResults$site)
 easyFitResults$leaf <- as.factor(easyFitResults$leaf)
@@ -276,9 +299,8 @@ model3 <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone) + (1|site:lea
 summary(model3)
 ```
 
-# Test with some fake data. Counts in Pleaphase site 1.5x
 
-```{r highVarTest}
+```{r fakeDataHighSiteVar, include = FALSE, echo = FALSE}
 
 fakeData <- read.csv("../data/tempRes2_highSiteVariance.csv")
 
@@ -327,10 +349,8 @@ fakeModel1 <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone), data = f
 summary(fakeModel1)
 ```
 
-# LRT & ICC (with real data)
-Prereq: chunk8 - fullRateEstimates
 
-```{r LRT & ICC}
+```{r LRT & ICC, include = FALSE, echo = FALSE}
 
 model1_full <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone), data = easyFitResults)
 
@@ -349,12 +369,34 @@ ggplot(easyFitResults, aes(x = site, y = mumax)) +
   xlab("Site") +
   theme_minimal()
 
+ggplot(easyFitResults, aes(x = treatment, y = mumax)) +
+  geom_boxplot(fill = "lightblue") +
+  geom_jitter(width = 0.1, alpha = 0.5) +
+  ylab("Maximum Growth Rate (μmax)") +
+  xlab("Temperature") +
+  theme_minimal()
+
 ```
 
-```{r explicitNesting}
+```{r explicitNesting, include = FALSE, echo = FALSE}
 
 model4 <- lmer(mumax ~ treatment + (1|site/leaf/clone), data = easyFitResults)
 summary(model4)
 plot(model4)
 qqp(resid(model4))
+```
+
+# Model Results
+
+**model1_full** <- lmer(mumax ~ treatment + (1|site) + (1|leaf) + (1|clone), data = easyFitResults)
+ 
+**model1_reduced** <- lmer(mumax ~ treatment + (1|leaf) + (1|clone), data = easyFitResults)
+
+```{r lmResults}
+
+# LRT
+anova(model1_full, model1_reduced)
+
+summary(model1_full)
+summary(model1_reduced)
 ```
