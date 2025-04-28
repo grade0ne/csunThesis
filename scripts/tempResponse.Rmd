@@ -18,11 +18,10 @@ library(performance)
 
 ```
 
-
 ## Data import and factoring
 
 ```{r dataImport, include = FALSE}
-data <- read.csv("../data/tempRes2.csv")
+data <- read.csv("../data/tempRes2-30d.csv")
 
 data$cloneID <- paste(data$Site, data$Leaf, data$Clone, sep="-")
 
@@ -154,7 +153,7 @@ plot(res, log = "y")
 plot(res)
 ```
 
-```{r fullRateEstimates, include = FALSE, echo = FALSE}
+```{r fullRateEstimates, include = TRUE, echo = FALSE}
 # easy linear for ALL replicates
 
 manyEasyFits <- all_easylinear(count1 ~ time | site + leaf + clone + replicate, data = rateData)
@@ -399,4 +398,11 @@ anova(model1_full, model1_reduced)
 
 summary(model1_full)
 summary(model1_reduced)
+
+
+varcomps_full <- VarCorr(model1_full)
+print(varcomps, comp = "Variance", digits = 22)
+
+varcomps_reduced <- VarCorr(model1_reduced)
+print(varcomps, comp = "Variance", digits = 22)
 ```
