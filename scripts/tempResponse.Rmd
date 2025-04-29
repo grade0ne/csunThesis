@@ -52,7 +52,7 @@ cloneAvg <- data %>%
 ggplot(rawClone, aes(x = Day, y = Count, color = Treatment, group = interaction(cloneID, Treatment, Site))) +
   geom_point(position = position_dodge(0.85)) +
   labs(y = "Rotifer Abundance", x = "Day", caption = "Figure 1. Rotifer counts over time in 2 temps") +
-  scale_x_continuous(breaks = seq(3, 30, by = 3)) +
+  scale_x_continuous(breaks = seq(3, 36, by = 3)) +
   scale_color_manual(values = c("25C" = "blue", "30C" = "red")) +
   theme_minimal() +
   theme(
@@ -68,7 +68,7 @@ ggplot(cloneAvg, aes(x = Day, y = avgCount, color = Treatment, group = interacti
   geom_point() +
   geom_line() +
   labs(y = "Rotifer Abundance", x = "Day", caption = "Figure 1. Average counts over time in 2 temps, pooled clones") +
-  scale_x_continuous(breaks = seq(3, 30, by = 3)) +
+  scale_x_continuous(breaks = seq(3, 36, by = 3)) +
   scale_color_manual(values = c("25C" = "blue", "30C" = "red")) +
   theme_minimal() +
   theme(
