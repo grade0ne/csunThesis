@@ -406,3 +406,23 @@ print(varcomps, comp = "Variance", digits = 22)
 varcomps_reduced <- VarCorr(model1_reduced)
 print(varcomps, comp = "Variance", digits = 22)
 ```
+
+```{r interactionModels}
+
+model2 <- lmer(mumax ~ treatment + (1|site/leaf/clone), data = easyFitResults)
+
+summary(model2)
+
+model3 <- lmer(mumax ~ treatment + (1|site/leaf/clone) + (1|site/leaf)+ (1|site), data = easyFitResults)
+
+summary(model3)
+```
+
+
+```{r mickKeoughExample}
+
+modelKeough <- lm(mumax ~ site/leaf/clone, easyFitResults)
+plot(modelKeough)
+summary(modelKeough)
+anova(modelKeough)
+```
