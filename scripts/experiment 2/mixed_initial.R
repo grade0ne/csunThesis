@@ -1,8 +1,11 @@
 library(tidyverse)
 library(growthrates)
+library(lme4)
+library(lmerTest)
 
-#######################################################
-# Data
+
+
+# Data #######################################################
 
 data <- read.csv("data/initialMixedCultures/mixedInitial.csv")
 
@@ -16,8 +19,8 @@ data <- data %>%
     count1 = count + 1
   )
 
-#######################################################
-# Growth curves
+
+# Growth curves #############################################
 
 data_rep <- data %>%
   group_by(day, culture, temperature) %>%
@@ -31,7 +34,7 @@ ggplot(data_rep, aes(x = day, y = mean, color = temperature, group = interaction
   geom_point() +
   geom_line() +
   labs(y = "Rotifer Abundance", x = "Day") +
-  scale_x_continuous(breaks = seq(3, 21, by = 6)) +
+  scale_x_continuous(breaks = seq(3, 24, by = 6)) +
   scale_color_manual(values = c("25" = "blue2", "30" = "red")) +
   geom_errorbar(aes(ymin = mean - ci, ymax = mean + ci), width = 0.2, alpha = 0.6) +
   theme_minimal() +
@@ -43,8 +46,7 @@ ggplot(data_rep, aes(x = day, y = mean, color = temperature, group = interaction
     plot.caption = element_text(hjust = 0)  
   )
 
-#######################################################
-# Logistic growth model
+# Logistic growth model #############################################
 
 p = c(y0 = 2, mumax = 0.3, K = 100)
 
@@ -85,3 +87,29 @@ ggplot(r_filtered, aes(x = Temperature, y = meanr, fill = Temperature)) +
   scale_fill_manual(values= c("25C" = "blue4", "30C" = "red3")) +
   labs(y="r", x ="Temperature") +
   theme_minimal()
+
+# Plotting predicted values of logistic growth model ###############
+
+plot_indices <- c(sample(1:30, 15), sample(31:60, 15))
+
+par(mfrow = c(6,5), mar = c(2,2,2,1))
+
+for (i in plot_indices) {
+  plot(many_log[[i]])
+  this_r <- round(log_results$mumax[i], 4)
+  this_K <- round(log_results$K[i], 4)
+  this_temp <- log_results$Temperature[i]
+  this_id <- paste(log_results$Culture[i], log_results$Replicate[i], sep = "-")
+  title(main = paste(this_id, this_temp, sep = "_"), cex.main = 1)
+  mtext(paste("r:", this_r), side = 3, adj = 0.15, line = -1, cex = 0.65)
+  mtext(paste("K:", this_K), side = 3, adj = 0.15, line = -2, cex = 0.65)
+}
+
+# linear mixed model #############################################
+
+model1 <- lmer(mumax ~ Temperature + (1|Culture), data= log_results, REML = FALSE)
+summary(model1)
+isSingular(model1)
+
+model0 <- lm(mumax ~ Temperature, data = log_results)
+summary(model0)
