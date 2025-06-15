@@ -14,6 +14,8 @@ library(VCA)
 library(Rmisc)
 library(growthrates)
 library(tidyverse)
+library(moments)
+library(MASS)
 
 #######################################################
 # Data
@@ -57,7 +59,9 @@ log_results <- log_results %>%
       replicate %in% c(1, 2, 3) ~ "low",
       replicate %in% c(4, 5, 6) ~ "high"
     ),
-    logmu = log(mumax + 1)
+    logmu = log(mumax + 1),
+    sqrtmu = sqrt(mumax),
+    negsqrt = -1 / sqrt(mumax)
   )
 
 #######################################################
@@ -84,14 +88,14 @@ r_filtered <- log_results %>%
       geom_bar(stat = "identity", position = "dodge", width = 0.5) +
       geom_errorbar(aes(ymin = meanK-seK, ymax = meanK+seK), width = 0.35) +
       labs(y="K", x ="Temperature") +
-      theme_minimal()
+      theme_minimal() 
     
     # mean K by site
     K_filt_site <- log_results %>%
       filter(K < 199, K > 30.01) %>%
       group_by(treatment, site) %>%
-      summarise(meanK = mean(mumax),
-                seK = sd(mumax)/sqrt(n()))
+      summarise(meanK = mean(K),
+                seK = sd(K)/sqrt(n()))
     ggplot(K_filt_site, aes(x = site, y = meanK, fill = treatment)) +
       geom_bar(stat = "identity", position = "dodge", width = 0.5) +
       geom_errorbar(aes(ymin = meanK-seK, ymax = meanK+seK), position = position_dodge(0.5),width = 0.35) +
@@ -102,11 +106,20 @@ r_filtered <- log_results %>%
   # r bars
     
     # mean r by treatment
-    ggplot(r_filtered, aes(x = treatment, y = meanr)) +
+    ggplot(r_filtered, aes(x = treatment, y = meanr, fill = treatment)) +
       geom_bar(stat = "identity", position = "dodge", width = 0.5) +
       geom_errorbar(aes(ymin = meanr-ser, ymax = meanr+ser), width = 0.35) +
       labs(y="r", x ="Temperature") +
-      theme_minimal()
+      scale_fill_manual(values = c("high" = "#e67147", "low" = "#51969c")) +
+      theme_minimal() +
+      theme(
+        panel.grid = element_blank(),            
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),  
+        strip.background = element_rect(fill = "gray90", color = NA), 
+        plot.caption = element_text(hjust = 0),
+        legend.position = "none",
+        axis.text = element_text(size = 14)
+      )
     
     # mean r by site
     r_filt_site <- log_results %>%
@@ -153,11 +166,22 @@ r_filtered <- log_results %>%
                 ser = sd(mumax)/sqrt(n())) %>%
       mutate(leaf = as.factor(leaf),
              clone = as.factor(clone))
+    
     ggplot(r_filt_clone, aes(x = clone, y = meanr, fill = treatment)) +
       geom_bar(stat = "identity", position = "dodge", width = 0.5) +
       geom_errorbar(aes(ymin = meanr-ser, ymax = meanr+ser), position = position_dodge(0.5),width = 0.35) +
+      scale_fill_manual(values = c("high" = "#e67147", "low" = "#51969c")) +
       labs(y="r", x ="Clone") +
-      theme_minimal()
+      theme_minimal() +
+      theme(
+        panel.grid = element_blank(),            
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8),  
+        strip.background = element_rect(fill = "gray90", color = NA), 
+        plot.caption = element_text(hjust = 0),
+        legend.position = "none",
+        axis.text.x = element_text(size = 14)
+      )
+    
 
 #######################################################
 # Growth rate model
@@ -165,4 +189,44 @@ r_filtered <- log_results %>%
 log_lm <- lm(mumax ~ site/leaf/clone, log_results)
 loglog_lm <- lm(logmu ~ site/leaf/clone, log_results)
 
-model1 <- lmer(mumax ~ treatment + (1|site/leaf/clone), data = log_results)
+model1 <- lmer(negsqrt ~ treatment + (1|site/leaf/clone), data = log_results)
+
+qqp(resid(model1), "norm")
+
+boxcox(lm(mumax ~ treatment, data = log_results))
+
+simres <- simulateResiduals(fittedModel = model1, plot = TRUE)
+testResiduals(simres)
+
+model2 <- lmer(negsqrt ~ treatment + (1|leaf/clone), data = log_results)
+
+anova(model2, model1, test = "LRT")
+
+model3 <- lmer(negsqrt ~ treatment + (1|clone), data = log_results)
+
+anova(model3, model2, test = "LRT")
+#######################################################
+# Example growth rate plot
+
+# Choose two specific models to plot (e.g., first two randomly selected)
+plot_indices <- c(sample(1:102, 2))
+
+# Set up plotting window: 1 row, 2 columns
+par(mfrow = c(1, 2), mar = c(2, 2, 2, 1))
+
+# Loop through the selected models
+for (i in plot_indices) {
+  plot(many_log[[i]])
+  
+  # Extract and format metadata for annotations
+  this_r <- round(log_results$mumax[i], 4)
+  this_K <- round(log_results$K[i], 4)
+  this_temp <- log_results$Temperature[i]
+  this_id <- paste(log_results$Culture[i], log_results$Replicate[i], sep = "-")
+  
+  # Add title and annotation
+  title(main = paste(this_id, this_temp, sep = "_"), cex.main = 1)
+  mtext(paste("r:", this_r), side = 3, adj = 0.15, line = -1, cex = 0.75)
+  mtext(paste("K:", this_K), side = 3, adj = 0.15, line = -2, cex = 0.75)
+}
+
