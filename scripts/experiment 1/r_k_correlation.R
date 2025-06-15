@@ -56,6 +56,7 @@ model1 <- lm(logK ~ logR * treatment, data = data2)
 plot(model1)
 anova(model1)
 
+
 predicted <- expand.grid(
   logR = seq(min(data2$logR), max(data2$logR), length.out = 100),
   treatment = unique(data2$treatment)
