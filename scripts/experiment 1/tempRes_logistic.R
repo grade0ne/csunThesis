@@ -77,6 +77,7 @@ k_filtered <- log_results %>%
 r_filtered <- log_results %>%
   filter(mumax < 0.599) %>%
   group_by(treatment) %>%
+  mutate(treatment = factor(treatment, levels = c("low", "high"))) %>%
   summarise(meanr = mean(mumax),
             ser = sd(mumax)/sqrt(n()))
 
@@ -165,7 +166,8 @@ r_filtered <- log_results %>%
       summarise(meanr = mean(mumax),
                 ser = sd(mumax)/sqrt(n())) %>%
       mutate(leaf = as.factor(leaf),
-             clone = as.factor(clone))
+             clone = as.factor(clone),
+             treatment = factor(treatment, levels = c("low", "high")))
     
     ggplot(r_filt_clone, aes(x = clone, y = meanr, fill = treatment)) +
       geom_bar(stat = "identity", position = "dodge", width = 0.5) +
