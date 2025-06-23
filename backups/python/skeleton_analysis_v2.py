@@ -37,7 +37,7 @@ def extract_midline_path(skeleton):
     endpoints = np.logical_and(skeleton, neighbor_count == 1)
     endpoint_coords = np.column_stack(np.where(endpoints))
     if len(endpoint_coords) < 2:
-        raise ValueError("Midline has fewer than two endpoints.")
+        raise ValueError("fewer than two endpoints")
 
     G = nx.Graph()
     ys, xs = np.where(skeleton)
@@ -919,7 +919,7 @@ def compare_trimmed_volume_effect(midline, widths, arcs, trim_n=2):
 if __name__ == "__main__":
     
     # Load and preprocess
-    mask_path = "G:/Research/imageAnalysis/partical analysis results/ROImasks/c7-17-1_0031_s_SEG_BINf_roi2_mask.tif"
+    mask_path = "C:/Users/timet/Documents/~terHorst/git/csunThesis/backups/partical analysis results/ROImasks/c7-17-1_0016_s_SEG_BINf_roi1_mask.tif"
     original_mask = imread(mask_path) == 0
     upscaled = upscale_binary_mask(mask=original_mask, scale=2)
     cleaned = clean_binary_mask(mask=upscaled, close_footprint_size=13, rm_objects_size=100)

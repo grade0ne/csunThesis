@@ -40,9 +40,13 @@ data2$clone <- as.factor(data2$clone)
 data3 <- data2 %>%
   group_by(clone) %>%
   summarise(
+    meanR = mean(mumax),
+    meanK = mean(K),
     mean_logK = mean(logK),
     mean_logR = mean(logR)
   )
+
+write.csv(data3, file = "rvsK.csv")
 
 plot(data3$mean_logK~data3$mean_logR)
 
