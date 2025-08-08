@@ -42,7 +42,7 @@ log_results <- log_results %>%
   )
 
 # 3 - Plotting predicted values of logistic growth model #######################
-#     * chooses 30 random plots to display. each call of plot_indices assignment           generates a crop of random plots.
+#     * chooses 30 random plots to display. each call of plot_indices assignment generates a crop of random plots.
 
 plot_indices <- c(sample(1:152, 30))
 
