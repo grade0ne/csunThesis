@@ -30,12 +30,14 @@ library(car)
 model1<-lm(Rotifers~Colpidium, data = data)                                     # type I regression
 qqp(resid(model1), "norm")
 plot(model1)
+outlierTest(model1)
+influencePlot(model1)
 summary(model1)
 
 library(lmodel2)                                                                # type II regression
 model2<-lmodel2(Rotifers~Colpidium, range.y="relative", range.x="relative", 
                 data=data, nperm=99)
-
+model2
 # RMA: m = 0.40354873
 
 data <- data %>%
@@ -43,5 +45,6 @@ data <- data %>%
 
 ggplot(data, aes(x=Colpidium, y=Rotifers)) +
   geom_point(shape=1) +
-  guides(fill="none") + 
+  guides(fill="none") +
   geom_smooth(method="lm", formula=y~x)
+
