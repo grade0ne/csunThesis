@@ -47,4 +47,3 @@ ggplot(data, aes(x=Colpidium, y=Rotifers)) +
   geom_point(shape=1) +
   guides(fill="none") +
   geom_smooth(method="lm", formula=y~x)
-
