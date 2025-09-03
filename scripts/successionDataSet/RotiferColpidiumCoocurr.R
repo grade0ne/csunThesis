@@ -1,5 +1,6 @@
 library(tidyverse)
 
+
 data<-read.csv("Data/PP_succession_censusdata_cleaned.csv")
 data<-data%>%
   mutate(plantID = as.factor(paste(Plant.ID.Alpha, Plant.ID.Numeric)),
