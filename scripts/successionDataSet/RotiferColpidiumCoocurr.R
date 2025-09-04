@@ -18,6 +18,11 @@ plot(RtoP~leafAge, data = data)
 plot(Rotifers~Colpidium, data)
 plot(Rotifers~Colpidium, data, xlim = c(0, 40), ylim = c(0, 40))
 
+summary <- data %>%
+  ungroup() %>%
+  summarize(mean = mean(RtoP),
+            se = sd(RtoP)/sqrt(length(RtoP)))
+
 ggplot(data, aes(x=Colpidium, y=Rotifers, color=plantID)) +
   geom_point(stat="identity", size=2.3, position = position_dodge(.3)) +        
   geom_line() +                                                                 # optional, to show mult. measurs.
