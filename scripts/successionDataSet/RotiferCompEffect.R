@@ -2,14 +2,13 @@ library(tidyverse)
 
 Protists <- c("Bodo", "Colpoda", "Chrysomonads", "Colpidium", "Cryptomonads", "Cyclidium")
 
-data<-read.csv("Data/PP_succession_censusdata_cleaned.csv")
+data <- read.csv("Data/PP_succession_censusdata_cleaned.csv")
 
 data$Bodo <- as.integer(data$Bodo)
 
 data <- data %>%
   filter(if_any(all_of(Protists), ~ . > 0)) %>%
   mutate(
-        
         plantID = as.factor(paste(Plant.ID.Alpha, Plant.ID.Numeric)),
         cooccurr = Rotifers > 0
   ) %>%
@@ -28,7 +27,8 @@ graphdata <- data %>%
   group_by(Protist, occurrence) %>%
   summarise(
     mean = mean(value, na.rm = TRUE),
-    se = sd(value) / sqrt(length(value))
+    se = sd(value) / sqrt(length(value)),
+    Rotifers = Rotifers
   )
 
 ggplot(graphdata, aes(x = Protist, y = mean, group = occurrence, fill = occurrence)) +
