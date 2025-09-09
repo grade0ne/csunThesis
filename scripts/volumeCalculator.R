@@ -1,10 +1,11 @@
 Volumes <- function(totalVol, rCount, pCount, kRratio, PtoR=2.5, kR=74.3,      
                     measVol=0.1) {
+  # totalVol: targeted total volume in tube
   # rCount:   n rotifers ml^-1 in stock
   # pCount:   n protists ml^-1 in stock
   # kRratio:  targeted fraction of rotifer carrying capacity (k)
   # PtoR:     ratio of protists to rotifers (default 2.5)
-  # kR:       carrying capacity of average rotifer clone (constant)
+  # kR:       carrying capacity of average rotifer clone (constant; 74.3/0.1ml)
   
   Rtarget <- kR * kRratio
   Ptarget <- Rtarget * PtoR
@@ -12,6 +13,8 @@ Volumes <- function(totalVol, rCount, pCount, kRratio, PtoR=2.5, kR=74.3,
   rotifer_volume <- ((Rtarget * measVol) / rCount) * (totalVol / measVol)
   protist_volume <- ((Ptarget * measVol) / pCount) * (totalVol / measVol)
   
-  output <- data.frame(rotifer_volume, protist_volume)
+  top_off <- totalVol - (rotifer_volume + protist_volume)
+  
+  output <- data.frame(rotifer_volume, protist_volume, top_off)
   return(output)
 }
