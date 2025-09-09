@@ -1,5 +1,5 @@
 Volumes <- function(totalVol, rCount, pCount, kRratio, PtoR=2.5, kR=74.3,      
-                    measVol=0.1) {
+                    measVol=0.1, bactVol=5) {
   # totalVol: targeted total volume in tube
   # rCount:   n rotifers ml^-1 in stock
   # pCount:   n protists ml^-1 in stock

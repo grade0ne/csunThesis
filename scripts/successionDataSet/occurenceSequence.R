@@ -60,4 +60,4 @@ model1 <- lm(logRatio ~ Protist + history, data = data)
 #             | - SCO : Sustained co-occurrence
 #             |         * look at this separately, does it go up or down? 
 #             |           (there are likely not many though)
-#       [ ] 3) Compare R:P ratio across different protists; look for co-linearity w/ size
+#       [x] 3) Compare R:P ratio across different protists; look for co-linearity w/ size
