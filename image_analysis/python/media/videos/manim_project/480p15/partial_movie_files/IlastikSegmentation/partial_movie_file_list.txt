@@ -1,5 +1,0 @@
-# This file is used internally by FFMPEG.
-file 'file:G:/Research/imageAnalysis/python/media/videos/manim_project/480p15/partial_movie_files/IlastikSegmentation/1185818338_3924581228_223132457.mp4'
-file 'file:G:/Research/imageAnalysis/python/media/videos/manim_project/480p15/partial_movie_files/IlastikSegmentation/624642324_1839128356_2228202154.mp4'
-file 'file:G:/Research/imageAnalysis/python/media/videos/manim_project/480p15/partial_movie_files/IlastikSegmentation/624642324_3603853939_1158783120.mp4'
-file 'file:G:/Research/imageAnalysis/python/media/videos/manim_project/480p15/partial_movie_files/IlastikSegmentation/624642324_2408024828_4053561772.mp4'
