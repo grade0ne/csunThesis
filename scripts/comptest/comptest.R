@@ -76,8 +76,8 @@ link_df <- bind_rows(
 ) %>%
   arrange(treatment, day)
 
-pd <- position_dodge(width = 0.15)
 
+pd <- position_dodge(width = 0.15)
 ggplot(bridgeData, aes(x = day, y = mean, color = treatment)) +
   annotate("rect", xmin = -Inf, xmax = 0.95, ymin = -Inf, ymax = Inf, 
     fill = "grey95", alpha = 0.5) +
