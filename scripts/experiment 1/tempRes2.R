@@ -1,7 +1,7 @@
 library(tidyverse)
 library(ggplot)
 
-data <- read.csv("data/tempRes2.csv")
+data <- read.csv("data/tempres/tempRes2.csv")
 
 data$CloneID <- paste(data$Site, data$Leaf, data$Clone, sep = "-")
 
