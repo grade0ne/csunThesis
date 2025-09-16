@@ -21,7 +21,7 @@ library(ggbreak)
 #######################################################
 # Data
 
-my_data <- read.csv("data/tempRes2-30d.csv")
+my_data <- read.csv("data/tempres/tempRes2-30d.csv")
 
 my_data <- my_data %>%
   mutate(
@@ -144,8 +144,7 @@ k_filtered <- log_results %>%
   filter(K < 199, K > 30.01) %>%
   group_by(treatment) %>%
   summarise(meanK = mean(K),
-            seK = sd(K)/sqrt(n())
-            )
+            seK = sd(K)/sqrt(length(K)))
 
 r_filtered <- log_results %>%
   filter(mumax < 0.599) %>%
