@@ -9,7 +9,7 @@ data <- data %>% mutate(countmL = count * 6.8)
 ### All counts bar
 
 allBarDF <- data %>%
-  filter(day == 5) %>%
+  filter(day == 9) %>%
   group_by(treatment, sp) %>%
   summarize(mean = mean(countmL),
             n = length(countmL),
