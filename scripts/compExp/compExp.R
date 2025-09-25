@@ -1,4 +1,4 @@
-lbs<-c('tidyverse','car','moments','lme4','lmerTest')
+lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates')
 lapply(lbs,library,character.only=TRUE)
 theme_alex<-readRDS('theme_alex.rds')
 
@@ -20,6 +20,7 @@ ggplot(groupedData%>%filter(species=='protist'), aes(x=day, y=mean, color=treatI
   geom_errorbar(stat = 'identity', position = d1, aes(ymin = mean - se, ymax = mean + se)) +
   geom_point(data = rawData %>% filter(species == 'protist'), 
              aes(x = day, y = count, color = treatID), alpha = 0.15, position = d1) +
+  labs(x = "Time (d)", y = "Count (indiv per 0.1 ml)") +
   theme_alex #+
 #  facet_wrap(~competition)
 #  facet_wrap(~currentTemp)
