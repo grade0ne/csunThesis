@@ -7,33 +7,33 @@ rawData<-read.csv("data/compexp/compexpData.csv") %>%
                 as.factor))
 
 groupedData <- rawData %>% group_by(day, currentTemp, competition, treatID, species) %>% 
-  summarize(mean = mean(count), se = sd(count)/sqrt(length(count)))
+  summarize(mean = mean(count), ci = (sd(count)/sqrt(length(count))) * 1.96)
 
 d1 = position_dodge(width=0.1)
 
 ################################################################################
-# Protists | mean + SE x time
+# Protists | mean + ci x time
 
 ggplot(groupedData%>%filter(species=='protist'), aes(x=day, y=mean, color=treatID)) +
   geom_point(position = d1) +
   geom_line(position = d1) +
-  geom_errorbar(stat = 'identity', position = d1, aes(ymin = mean - se, ymax = mean + se)) +
+  geom_errorbar(stat = 'identity', position = d1, aes(ymin = mean - ci, ymax = mean + ci)) +
   geom_point(data = rawData %>% filter(species == 'protist'), 
              aes(x = day, y = count, color = treatID), alpha = 0.15, position = d1) +
   labs(x = "Time (d)", y = "Count (indiv per 0.1 ml)") +
   theme_alex +
-#  facet_wrap(~competition)
-  facet_wrap(~currentTemp)
+  facet_wrap(~competition)
+#  facet_wrap(~currentTemp)
 
 ################################################################################
-# Rotifers | mean + SE x time
+# Rotifers | mean + ci x time
 
 ggplot(groupedData%>%filter(species=='rotifer'), aes(x=day, y=mean, color=treatID)) +
   geom_point(position = d1) +
   geom_line(position = d1) +
-  geom_errorbar(stat = 'identity', position = d1, aes(ymin = mean - se, ymax = mean + se)) +
+  geom_errorbar(stat = 'identity', position = d1, aes(ymin = mean - ci, ymax = mean + ci)) +
   geom_point(data = rawData %>% filter(species == 'rotifer'), 
              aes(x = day, y = count, color = treatID), alpha = 0.15, position = d1) +
-  theme_alex #+
+  theme_alex +
 #  facet_wrap(~competition)
-#  facet_wrap(~currentTemp)
+  facet_wrap(~currentTemp)
