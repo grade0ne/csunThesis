@@ -35,5 +35,5 @@ ggplot(groupedData%>%filter(species=='rotifer'), aes(x=day, y=mean, color=treatI
   geom_point(data = rawData %>% filter(species == 'rotifer'), 
              aes(x = day, y = count, color = treatID), alpha = 0.15, position = d1) +
   theme_alex +
-#  facet_wrap(~competition)
-  facet_wrap(~currentTemp)
+  facet_wrap(~competition)
+#  facet_wrap(~currentTemp)
