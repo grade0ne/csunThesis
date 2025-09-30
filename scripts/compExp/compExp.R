@@ -12,7 +12,7 @@ groupedData <- rawData %>% group_by(day, currentTemp, competition, treatID, spec
 d1 = position_dodge(width=0.1)
 
 ################################################################################
-# Protists | mean + ci x time
+# Plot of growth         | Protists  | mean + ci x time
 
 ggplot(groupedData%>%filter(species=='protist'), aes(x=day, y=mean, color=treatID)) +
   geom_point(position = d1) +
@@ -27,7 +27,7 @@ ggplot(groupedData%>%filter(species=='protist'), aes(x=day, y=mean, color=treatI
   facet_grid(competition~currentTemp)
 
 ################################################################################
-# Rotifers | mean + ci x time
+# Plot of growth          | Rotifers  | mean + ci x time
 
 ggplot(groupedData%>%filter(species=='rotifer'), aes(x=day, y=mean, color=treatID)) +
   geom_point(position = d1) +
@@ -41,7 +41,7 @@ ggplot(groupedData%>%filter(species=='rotifer'), aes(x=day, y=mean, color=treatI
   facet_grid(competition~currentTemp)
 
 ################################################################################
-# Growth Rates | Rotifers
+# Estimating Growth Rates | Rotifers
 
 rotiferParameters <- c(y0 = 4, mumax = 0.3, K = 100)
 
@@ -80,7 +80,7 @@ ggplot(rotiferGraph, aes(x = evolvedTemp, y = mean, fill = competition)) +
   theme_alex
 
 ################################################################################
-# Growth Rates | Protists
+# Estimating Growth Rates | Protists
 
 protistParameters <- c(y0 = 10, mumax = 1.5, K = 750)
 
