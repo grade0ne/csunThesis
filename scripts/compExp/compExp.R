@@ -1,4 +1,4 @@
-lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates')
+lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates','ggpattern')
 lapply(lbs,library,character.only=TRUE)
 theme_alex<-readRDS('theme_alex.rds')
 
@@ -6,7 +6,7 @@ rawData<-read.csv("data/compexp/compexpData.csv") %>%
   mutate(across(c(evolvedTemp,currentTemp,competition,species,treatID,repNum,repID),
                 as.factor))
 
-groupedData <- rawData %>% group_by(day, currentTemp, competition, treatID, species) %>% 
+groupedData <- rawData %>% group_by(day, evolvedTemp, currentTemp, competition, treatID, species) %>% 
   summarize(mean = mean(count), ci = (sd(count)/sqrt(length(count))) * 1.96)
 
 d1 = position_dodge(width=0.1)
@@ -29,9 +29,10 @@ ggplot(groupedData%>%filter(species=='protist'), aes(x=day, y=mean, color=treatI
 ################################################################################
 # Plot of growth          | Rotifers  | mean + ci x time
 
-ggplot(groupedData%>%filter(species=='rotifer'), aes(x=day, y=mean, color=treatID)) +
+ggplot(groupedData%>%filter(species=='rotifer'), aes(x=day, y=mean, color=treatID, linetype = evolvedTemp)) +
   geom_point(position = d1) +
   geom_line(position = d1) +
+  scale_linetype_discrete() +
   geom_errorbar(stat = 'identity', position = d1, aes(ymin = mean - ci, ymax = mean + ci)) +
   geom_point(data = rawData %>% filter(species == 'rotifer'), 
              aes(x = day, y = count, color = treatID), alpha = 0.15, position = d1) +
@@ -164,7 +165,11 @@ protistResults <- as.data.frame(coef(protistLogistic)) %>%
   mutate(treatment = factor(treatment),
          species = factor(species),
          repNum = factor(repNum),
-         currentTemp = factor(currentTemp))
+         currentTemp = factor(currentTemp),
+         evoRotifTemp = case_when(
+           treatment %in% c('HP', 'NP') ~ "Protist only (25C)",
+           TRUE ~ paste0(evolvedTemp, "C")
+         ))
 
 plot_indices <- c(1:60)
 par(mfrow = c(6, 10), mar = c(2, 2, 2, 1))
@@ -186,7 +191,7 @@ for (i in plot_indices) {
 # Plotting Parameters | Protists
 
 protistGraphs <- protistResults %>%
-  group_by(treatment, currentTemp, competition) %>%
+  group_by(treatment, evoRotifTemp, currentTemp, competition) %>%
   summarize(
     mean_r = mean(mumax),
     ci_r = sd(mumax) / sqrt(length(mumax)) * 1.96,
@@ -197,17 +202,21 @@ protistGraphs <- protistResults %>%
 d2 <- position_dodge(width=1)
 
 # r
-ggplot(protistGraphs, aes(x = treatment, y = mean_r, fill = currentTemp)) + 
-  geom_bar(stat = 'identity', position = d2) +
+ggplot(protistGraphs, aes(x = treatment, y = mean_r, fill = currentTemp, color = evoRotifTemp)) + 
+  geom_bar(stat = 'identity', position = d2, linewidth = 1) +
   geom_errorbar(stat = 'identity', position = d2, aes(ymax = mean_r + ci_r, ymin = mean_r - ci_r)) +
-  labs(x = 'Treatment', y = 'Maximum growth rate of protists (r)', fill = 'Temperature') +
+  labs(x = 'Treatment', y = 'Maximum growth rate of protists (r)', fill = 'Contemp. Temp') +
+  scale_fill_manual(values = c('lightgreen', 'orange')) +
+  scale_color_manual(values = c("cyan3", "red2", "black")) +
   theme_alex
 
 # k
-ggplot(protistGraphs, aes(x = treatment, y = mean_K, fill = currentTemp)) + 
-  geom_bar(stat = 'identity', position = d2) +
+ggplot(protistGraphs, aes(x = treatment, y = mean_K, fill = currentTemp, color = evoRotifTemp)) + 
+  geom_bar(stat = 'identity', position = d2, linewidth = 1.4) +
   geom_errorbar(stat = 'identity', position = d2, aes(ymax = mean_K + ci_K, ymin = mean_K - ci_K)) +
-  labs(x = 'Treatment', y = 'Maximum growth rate of protists (r)', fill = 'Temperature') +
+  labs(x = 'Treatment', y = 'Carrying capacity of protists (K)', fill = 'Temperature') +
+  scale_fill_manual(values = c('#90C3F2', '#FFB000')) +
+  scale_color_manual(values = c("#648FFF", "#DE7604", "black")) +
   theme_alex
 
 ################################################################################
@@ -238,13 +247,13 @@ model_rotifer_logr.T   <- lm(logmumax ~ currentTemp, rotiferResults)
 model_rotifer_logr.C   <- lm(logmumax ~ competition, rotiferResults)
 
 
-AIC(model_rotifer_logr.ETC) # 107
-AIC(model_rotifer_logr.ET)  # 126
-AIC(model_rotifer_logr.EC)  # 140
-AIC(model_rotifer_logr.TC)  # 101 *
-AIC(model_rotifer_logr.E)   # 150
-AIC(model_rotifer_logr.T)   # 122
-AIC(model_rotifer_logr.C)   # 137
+AIC(model_rotifer_logr.ETC) # 
+AIC(model_rotifer_logr.ET)  # 
+AIC(model_rotifer_logr.EC)  # 
+AIC(model_rotifer_logr.TC)  #  *
+AIC(model_rotifer_logr.E)   # 
+AIC(model_rotifer_logr.T)   # 
+AIC(model_rotifer_logr.C)   # 
 
 ################################################################################
 # Protist r
@@ -265,16 +274,18 @@ model_protist_logr.T   <- lm(logmumax ~ currentTemp, protistResults)
 model_protist_logr.C   <- lm(logmumax ~ competition, protistResults)
 
 
-AIC(model_protist_logr.ETC) #  86.6
-AIC(model_protist_logr.ET)  #  88.8
-AIC(model_protist_logr.EC)  # 102.0
-AIC(model_protist_logr.TC)  #  83.9 *
-AIC(model_protist_logr.E)   # 100.5
-AIC(model_protist_logr.T)   #  87.9
-AIC(model_protist_logr.C)   # 100.7
+AIC(model_protist_logr.ETC) # 
+AIC(model_protist_logr.ET)  # 
+AIC(model_protist_logr.EC)  # 
+AIC(model_protist_logr.TC)  #  *
+AIC(model_protist_logr.E)   # 
+AIC(model_protist_logr.T)   # 
+AIC(model_protist_logr.C)   # 
 
 ################################################################################
 # Rotifer K
+
+
 
 ################################################################################
 # Protist K
@@ -290,11 +301,10 @@ model_protist_K.T   <- lm(K ~ currentTemp, protistResults)
 model_protist_K.C   <- lm(K ~ competition, protistResults)
 
 
-AIC(model_protist_K.ETC) # 793.4
-AIC(model_protist_K.ET)  # 811
-AIC(model_protist_K.EC)  # 806
-AIC(model_protist_K.TC)  # 792.6  *
-AIC(model_protist_K.E)   # 807.87
-AIC(model_protist_K.T)   # 807.91
-AIC(model_protist_K.C)   # 807.5
-
+AIC(model_protist_K.ETC) # 
+AIC(model_protist_K.ET)  # 
+AIC(model_protist_K.EC)  # 
+AIC(model_protist_K.TC)  #   *
+AIC(model_protist_K.E)   # 
+AIC(model_protist_K.T)   # 
+AIC(model_protist_K.C)   # 
