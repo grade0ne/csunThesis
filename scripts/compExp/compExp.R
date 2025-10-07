@@ -1,4 +1,4 @@
-lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates','ggpattern')
+lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates','ggpattern','agricolae','emmeans')
 lapply(lbs,library,character.only=TRUE)
 theme_alex<-readRDS('theme_alex.rds')
 
@@ -140,7 +140,6 @@ ggplot(rotiferGraphs, aes(x = evolvedTemp, y = mean_K, fill = competition)) +
 #####################################################
 # Estimating Growth Parameters | Protists
 
-
 protistParameters <- c(y0 = 10, mumax = 1.5, K = 750)
 
 protistLowerP <- c(y0 = 0, mumax = 1e-2, K = 500)
@@ -235,9 +234,12 @@ ggplot(protistGraphs, aes(x = treatment, y = mean_K, fill = currentTemp, color =
 model_rotifer_r.ETC <- lm(mumax ~ evolvedTemp * currentTemp * competition, rotiferResults)
 qqp(resid(model_rotifer_r.ETC), 'norm')
 
-rotiferResults <- rotiferResults %>% mutate(logmumax = log(mumax))
+rotiferResults <- rotiferResults %>% mutate(logmumax = log(mumax), dblogmumax = log(logmumax + 2))
 model_rotifer_logr.ETC <- lm(logmumax ~ evolvedTemp * currentTemp * competition, rotiferResults)
+model_rotifer_dblogr.ETC <- lm(dblogmumax ~ evolvedTemp * currentTemp * competition, rotiferResults)
+
 qqp(resid(model_rotifer_logr.ETC), 'norm')
+qqp(resid(model_rotifer_dblogr.ETC), 'norm')
 
 model_rotifer_logr.ET  <- lm(logmumax ~ evolvedTemp * currentTemp, rotiferResults)
 model_rotifer_logr.EC  <- lm(logmumax ~ evolvedTemp * competition, rotiferResults)
@@ -245,7 +247,6 @@ model_rotifer_logr.TC  <- lm(logmumax ~ currentTemp * competition, rotiferResult
 model_rotifer_logr.E   <- lm(logmumax ~ evolvedTemp, rotiferResults)
 model_rotifer_logr.T   <- lm(logmumax ~ currentTemp, rotiferResults)
 model_rotifer_logr.C   <- lm(logmumax ~ competition, rotiferResults)
-
 
 AIC(model_rotifer_logr.ETC) # 
 AIC(model_rotifer_logr.ET)  # 
@@ -258,53 +259,78 @@ AIC(model_rotifer_logr.C)   #
 ################################################################################
 # Protist r
 
-model_protist_r.ETC <- lm(mumax ~ evolvedTemp * currentTemp * competition, protistResults)
-qqp(resid(model_protist_r.ETC), 'norm')
+protistResults <- protistResults %>% mutate(logmumax = log(mumax),
+                                            compFact = case_when(
+                                              evolvedTemp == '25' & competition == TRUE ~ 'rotif25',
+                                              evolvedTemp == '30' & competition == TRUE ~ 'rotif30',
+                                              competition == FALSE ~ 'noComp'
+                                            ))
 
-protistResults <- protistResults %>% mutate(logmumax = log(mumax))
+model_protist_logr.CT <- lm(logmumax ~ currentTemp * compFact, protistResults)
 
-model_protist_logr.ETC <- lm(logmumax ~ evolvedTemp * currentTemp * competition, protistResults)
-qqp(resid(model_protist_logr.ETC), 'norm')
-
-model_protist_logr.ET  <- lm(logmumax ~ evolvedTemp * currentTemp, protistResults)
-model_protist_logr.EC  <- lm(logmumax ~ evolvedTemp * competition, protistResults)
-model_protist_logr.TC  <- lm(logmumax ~ currentTemp * competition, protistResults)
-model_protist_logr.E   <- lm(logmumax ~ evolvedTemp, protistResults)
-model_protist_logr.T   <- lm(logmumax ~ currentTemp, protistResults)
-model_protist_logr.C   <- lm(logmumax ~ competition, protistResults)
-
-
-AIC(model_protist_logr.ETC) # 
-AIC(model_protist_logr.ET)  # 
-AIC(model_protist_logr.EC)  # 
-AIC(model_protist_logr.TC)  #  *
-AIC(model_protist_logr.E)   # 
-AIC(model_protist_logr.T)   # 
-AIC(model_protist_logr.C)   # 
+emm <- emmeans(model_protist_logr.CT, ~ compFact | currentTemp)
+pairs(emm, adjust = "tukey")
 
 ################################################################################
 # Rotifer K
 
+model_rotifer_K.ETC <- lm(K ~ evolvedTemp * currentTemp * competition, rotiferResults)
+qqp(resid(model_rotifer_K.ETC), 'norm')
 
+model_rotifer_K.ETC_manual <- lm(K ~ evolvedTemp + currentTemp + competition + evolvedTemp:currentTemp:competition, rotiferResults)
+
+model_rotifer_K.ET  <- lm(K ~ evolvedTemp * currentTemp, rotiferResults)
+model_rotifer_K.EC  <- lm(K ~ evolvedTemp * competition, rotiferResults)
+model_rotifer_K.TC  <- lm(K ~ currentTemp * competition, rotiferResults)
+model_rotifer_K.E   <- lm(K ~ evolvedTemp, rotiferResults)
+model_rotifer_K.T   <- lm(K ~ currentTemp, rotiferResults)
+model_rotifer_K.C   <- lm(K ~ competition, rotiferResults)
+
+AIC(model_rotifer_K.ETC)
+AIC(model_rotifer_K.ET)
+AIC(model_rotifer_K.EC) # *
+AIC(model_rotifer_K.TC)
+AIC(model_rotifer_K.E)
+AIC(model_rotifer_K.T)
+AIC(model_rotifer_K.C)
+
+emm <- emmeans(model_rotifer_K.ETC, ~ evolvedTemp | competition | currentTemp)
+pairs(emm, adjust = 'tukey')
+
+rotiferGraph <- as.data.frame(emmeans(model_rotifer_K.ETC, ~ evolvedTemp | competition | currentTemp))
+
+p3 <- position_dodge(width = 0.65)
+ggplot(rotiferGraph, aes(x = competition, y = emmean, fill = evolvedTemp)) +
+  geom_bar(stat = 'identity', position = p3, width = 0.6) +
+  geom_errorbar(stat = 'identity', position = p3, width = 0.5, aes(ymin = emmean - SE, ymax = emmean + SE)) +
+  labs(x = 'Competition', y = 'Carrying capacity (K)', fill = 'Evol. Hist.') +
+  facet_wrap(~currentTemp) +
+  theme_alex
+
+emm <- emmeans(model_rotifer_K.EC, ~ evolvedTemp | competition)
+pairs(emm, adjust = 'tukey')
+
+rotiferGraph <- as.data.frame(emmeans(model_rotifer_K.EC, ~ evolvedTemp | competition))
+
+p3 <- position_dodge(width = 0.65)
+ggplot(rotiferGraph, aes(x = competition, y = emmean, fill = evolvedTemp)) +
+  geom_bar(stat = 'identity', position = p3, width = 0.6) +
+  geom_errorbar(stat = 'identity', position = p3, width = 0.5, aes(ymin = emmean - SE, ymax = emmean + SE)) +
+  theme_alex
 
 ################################################################################
 # Protist K
 
-model_protist_K.ETC <- lm(K ~ evolvedTemp * currentTemp * competition, protistResults)
-qqp(resid(model_protist_K.ETC), 'norm')
+model_protist_K.CT <- lm(K ~ currentTemp * compFact, protistResults)
 
-model_protist_K.ET  <- lm(K ~ evolvedTemp * currentTemp, protistResults)
-model_protist_K.EC  <- lm(K ~ evolvedTemp * competition, protistResults)
-model_protist_K.TC  <- lm(K ~ currentTemp * competition, protistResults)
-model_protist_K.E   <- lm(K ~ evolvedTemp, protistResults)
-model_protist_K.T   <- lm(K ~ currentTemp, protistResults)
-model_protist_K.C   <- lm(K ~ competition, protistResults)
+emm <- emmeans(model_protist_K.CT, ~ compFact | currentTemp)
+pairs(emm, adjust = "tukey")
 
+protistGraph <- as.data.frame(emmeans(model_protist_K.CT, ~ compFact | currentTemp))
 
-AIC(model_protist_K.ETC) # 
-AIC(model_protist_K.ET)  # 
-AIC(model_protist_K.EC)  # 
-AIC(model_protist_K.TC)  #   *
-AIC(model_protist_K.E)   # 
-AIC(model_protist_K.T)   # 
-AIC(model_protist_K.C)   # 
+p3 <- position_dodge(width = 0.65)
+ggplot(protistGraph, aes(x = compFact, y = emmean, fill = compFact)) +
+  geom_bar(stat = 'identity', position = p3, width = 0.6) +
+  geom_errorbar(stat = 'identity', position = p3, width = 0.5, aes(ymin = emmean - SE, ymax = emmean + SE)) +
+  facet_wrap(~currentTemp) +
+  theme_alex
