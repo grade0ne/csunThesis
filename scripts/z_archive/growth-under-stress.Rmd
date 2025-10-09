@@ -1,0 +1,235 @@
+---
+title: "Growth Under Stress"
+description: |
+  Measuring growth rate at a common stressful temperature
+author:
+  - name: Alex Mendelson
+    url: {}
+date: 2024-07-08
+output:
+  distill::distill_article:
+    self_contained: false
+    code_folding: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(car)
+library(tidyverse)
+library(dplyr)
+library(knitr)
+library(moments)
+library(ggplot2)
+library(broom)
+```
+
+```{r expDesign, include=TRUE, echo=TRUE}
+sourceCultures <- data.frame(
+  CloneID = c("1.2", "1.5", "1.7", "2.3", "2.4", "2.5"),
+  Count = c(147, 453, 67, 353, 167, 380))
+
+vol6ExpCult <- 80 / sourceCultures$Count
+sourceCultures <- cbind(sourceCultures, vol6ExpCult)
+
+volTot <- vol6ExpCult * 8
+sourceCultures <- cbind(sourceCultures, volTot)
+
+volPlasota <- 8 - vol6ExpCult
+sourceCultures <- cbind(sourceCultures, volPlasota)
+
+#tibble(sourceCultures)
+
+culturePrep <- data.frame(
+  Clone = sourceCultures$CloneID,
+  Rotifers = sourceCultures$vol6ExpCult,
+  Plasota = sourceCultures$volPlasota
+)
+
+kable(culturePrep)
+
+```
+
+```{r growthCurve, include=TRUE, echo=TRUE}
+
+growthdata <- read.csv("C:\\Users\\timet\\Documents\\~terHorst\\Git Repositories\\blog\\data\\35-24growthRate.csv")
+glimpse(growthdata)
+
+growthdata$CloneID <- as.factor(growthdata$CloneID)
+
+growthdata <- growthdata %>%
+  mutate(logCount = log(Count +1))
+
+graphdata <- growthdata %>%
+  group_by(CloneID, Day) %>%
+  summarize(mean=mean(Count), 
+            sd=sd(Count), 
+            se=sd(Count)/sqrt(length(Count)))
+
+glimpse(graphdata)
+  
+custom_labels <- c("1","2","3","4","5","6")
+
+# glm
+
+gl_model_results <- growthdata %>%
+  group_by(CloneID) %>%
+  do(tidy(glm(Count ~ Day, family = poisson(link = "log"), data = .))) %>%
+  filter(term == "Day") %>%
+  rename(GrowthRate = estimate, StdError = std.error)
+
+print(gl_model_results)
+
+# glm plot
+
+# Compute predictions and confidence intervals
+predictions <- growthdata %>%
+  group_by(CloneID) %>%
+  do({
+    model <- glm(Count ~ Day, family = poisson(link = "log"), data = .)
+    prediction_data <- data.frame(Day = seq(min(.$Day), max(.$Day), length.out = 100))
+    prediction_data$Predicted <- predict(model, newdata = prediction_data, type = "response")
+    prediction_data
+  })
+
+# Join predictions with the original data for plotting
+log_graphdata <- log_graphdata %>%
+  left_join(predictions, by = c("CloneID", "Day"))
+
+# Plotting the original data with predictions
+logGrowth <- ggplot(log_graphdata, aes(x = Day, y = logMean, group = CloneID, color = CloneID, shape = CloneID)) +
+  geom_point(size = 2) +
+  geom_line(size = 1.1) +
+  geom_line(aes(y = Predicted), linetype = "dashed", size = 1.1) + # Add predictions as dashed lines
+  scale_x_continuous(breaks = c(2, 4, 6, 8, 10)) +
+  labs(x = "Time (days)", y = "Abundance") +
+  geom_errorbar(aes(ymax = logMean + seLog, ymin = logMean - seLog), position = position_dodge(0.1), size = 0.6, width = 1) +
+  guides(color = guide_legend(title = "Clone"), shape = guide_legend(title = "Clone")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none", axis.text = element_text(size = 12)) +
+  scale_color_discrete(labels = custom_labels) +
+  scale_shape_manual(values = 1:6, labels = custom_labels)
+
+print(logGrowth)
+
+
+
+# non-transformed graph
+
+growth <- ggplot(graphdata, aes(x = Day, y = mean, group = CloneID, color = CloneID, shape = CloneID)) +
+  geom_point(size = 2) +
+  geom_line(size = 1.1) +
+  scale_x_continuous(breaks = c(2, 4, 6, 8, 10)) +
+  labs(x = "Time (days)", y = "Abundance") +
+  geom_errorbar(aes(ymax = mean + se, ymin = mean - se), position = position_dodge(0.1), size = 0.6, width = 1) +
+  guides(color = guide_legend(title = "Clone"), shape = guide_legend(title = "Clone")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none", axis.text = element_text(size = 12)) +
+  scale_color_discrete(labels = custom_labels) +
+  scale_shape_manual(values = 1:6, labels = custom_labels)
+
+ggsave("growthcurve_nolegend.png", plot = growth, width = 6, height = 6)
+
+plot(growth)
+
+# LOG transformed graph with predictions from models (block below)
+
+predictions <- growthdata %>%
+  group_by(CloneID) %>%
+  do({
+    model <- lm(logCount ~ Day, data = .)
+    data.frame(Day = .$Day,
+               Predicted = predict(model, interval = "confidence")[, "fit"],
+               lwr = predict(model, interval = "confidence")[, "lwr"],
+               upr = predict(model, interval = "confidence")[, "upr"])
+    })
+
+log_graphdata <- growthdata %>%
+  group_by(CloneID, Day) %>%
+  summarize(logMean=mean(logCount), sdLog=sd(logCount), seLog=sd(logCount)/sqrt(length(logCount)))
+
+log_graphdata <- log_graphdata %>%
+  left_join(predictions, by = c("CloneID", "Day"))
+
+logGrowth <- ggplot(log_graphdata, aes(x = Day, y = logMean, group = CloneID, color = CloneID)) +
+  geom_point(size = 2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = CloneID), alpha = 0.05, size=0.6) +
+  geom_line(aes(y = Predicted), linetype = "dashed", size = 1) + 
+  scale_x_continuous(breaks = c(2, 4, 6, 8, 10)) +
+  labs(x = "Time (days)", y = "log(Abundance)") +
+  geom_errorbar(aes(ymax = logMean + seLog, ymin = logMean - seLog), position = position_dodge(0.1), size = 0.6, width = 1) +
+  guides(color = guide_legend(title = "Clone"), shape = guide_legend(title = "Clone")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.text = element_text(size = 12)) +
+  scale_color_discrete(labels = custom_labels) +
+  scale_shape_manual(values = 1:6, labels = custom_labels)
+
+plot(logGrowth)
+plot(growth)
+
+```
+
+```{r growtRate, include=TRUE, echo=TRUE}
+# prerequisite: prev. block
+
+growthdata <- growthdata %>%
+  mutate(logCount = log(Count + 1))
+
+# log transf assumptions
+hist(growthdata$logCount)
+plot(data=growthdata, x=growthdata$Day, y=growthdata$logCount)
+
+zscoreCount_log<-scale(growthdata$logCount, center=TRUE, scale=TRUE) 
+hist(zscoreCount_log)
+
+qqnorm(growthdata$logCount)
+qqline(growthdata$logCount)
+
+qqp(growthdata$logCount, "norm")
+qqp(growthdata$Count, "norm")
+
+kurtosis(growthdata$logCount)
+skewness(growthdata$logCount)
+
+kurtosis(growthdata$Count)
+skewness(growthdata$Count)
+
+
+
+# ln transf assumptions
+
+
+# model
+
+model_results <- growthdata %>%
+  group_by(CloneID) %>%
+  do(tidy(lm(logCount ~ Day, data = .))) %>%
+  filter(term == "Day") %>%
+  rename(GrowthRate = estimate, StdError = std.error)
+
+print(model_results)
+
+model_results$CloneID <- as.factor(model_results$CloneID)
+
+growthRatePlot <- ggplot(model_results, aes(x=CloneID, y=GrowthRate, fill=CloneID, color=CloneID)) +
+  geom_bar(stat="identity") +
+  geom_errorbar(aes(ymax = GrowthRate + 1.96 * StdError, ymin = GrowthRate - 1.96 * StdError), position = position_dodge(0.1), size = 0.6, width = .5, color="black") +
+  labs(x = "Clone", y= "Growth Rate") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none", axis.text = element_text(size = 12))
+
+print(growthRatePlot)
+ggsave("growth_rate.png", plot = growthRatePlot, width = 6, height = 6)
+
+
+# manual models
+
+model1 <- growthdata %>%
+  group_by(CloneID) %>%
+  do(tidy(lm(logCount ~ Day, data=.))) %>%
+  filter(term=="Day")
+
+print(model1)
+
+```

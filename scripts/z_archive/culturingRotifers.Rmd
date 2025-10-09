@@ -1,0 +1,162 @@
+---
+title: "Culturing Rotifers"
+author: "Alex Mendelson"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.path = "../output/")
+```
+
+```{r, Libraries, echo=FALSE}
+library(car)
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(knitr)
+```
+
+
+
+## Measuring Abundance and Size
+### Testing out some methods
+
+This experiment is designed to test methods for estimating population growth rate and size among different clones from two leaves. 
+
+Stock culture candidates were chosen based on abundance and absence of contamination. At this point, several stock cultures are contaminated with ciliates and some have densities too low to be used for this experiment. *H. rosa* starting abundance was set at 200 individuals in 15 mL of media, or a density of ~13 rotifers per mL. Three clones from Leaf 1 and 5 clones from Leaf 2 were chosen based on these criteria.
+
+
+```{r, Read in CSV, echo=FALSE}
+stock4_24 <- read_csv(here("data","stockCultures4.24.csv"))
+```
+
+#### Table 1
+This table shows the number of rotifers in each stock culture per 300 uL, averaged from three samples. An inverted compound scope was used to count the sample volumes, which were housed in 24-well tissue culture plates.
+
+```{r Stock culture table, echo=FALSE}
+kable(stock4_24)
+```
+
+### Starting Experimental Cultures
+
+After counting the stock cultures, the volume of each stock needed to reach a concentration of 150 rotifers per 15 mL of media was calculated. That volume, unique to each clone, was then subtracted from 15 to find the volume of new Plasota media needed to reach a final volume of 15 mL.
+
+The respective volume of fresh Plasota media and stock culture was added for each clone into 50 mL Falcon tubes, labeled with the clone ID.
+
+One challenge associated with these stock cultures is the relative abundance of resources that will be available to new experimental cultures. Since experimental cultures that are started from stocks with low abundance will have a substantially larger proportion of media carried over from the stock cultures, it is impossible to ignore the mismatch in resource---mainly bacteria, but also different volumes of refreshed media and therefore different amounts of nutrition.
+
+In an attempt to level the playing field for this first round of experimental cultures, I added 100 uL of natural *S. purpurea* leaf water bacterial community (grown in Plasota media with sterile wheat seeds) to each culture, hoping to accelerate bacterial growth in order to reach a saturating resource concentration more quickly.
+
+Finally, a sterile wheat seed was added to each experimental culture with sterilized forceps. Culture tubes were vortex mixed for 1 second to homogenize and sink any floating wheat seeds.
+
+***
+
+### Data Collection
+#### Sampling
+
+Rotifer abundance was measured daily for 5 days and then bi-daily for 30 days, producing 20 time points over a 35 day experimental period.
+
+Rotifers were counted manually. At each time point, samples from each culture were added to a 24-well tissue culture plate. Counting order was randomized each day using a fixed-ratio matrix randomization script written in Python (Script 1). Culture tubes were vortex mixed for 5 seconds. _{[1]} Sample aliquots of 300 uL were added to each well, and the whole plate was gently swirled on the bench to ensure the samples were evenly distributed, and to break sample droplet surface tension.
+
+
+###### *[1] Previous observations (made by undergrad Vinnie) suggest vortex mix duration may be correlated to aparant rotifer abundance. This may be worth an experiment, but for now it just serves to emphasize counting a sample is only useful for comparing __relative__ abundances, and tells us little about the true culture density.*
+
+
+##### Script 1
+This script by famous mathematician and computer scientist Charles Young generates a custom matrix of randomized elements, with an adjustable ratio for each element. The dimensions of the matrix and the ratio of each random element can be set manually.
+```{python Randgen, eval=FALSE}
+import numpy as np
+import random as rand
+import math
+
+
+#genmat - Generates a matrix of a determined shape with a designated number of randomly placed elems
+# row - the desired number of rows
+# col - the desired number of columns
+# elems - the elems that need to be inserted
+# ratio - the number of each elements needed
+def genmat(row, col, elems, ratio):
+    count = 0
+    for i in ratio:
+        count += i
+    index = [0] * (row * col)
+    for i in range(row*col): # generates unfilled indices
+        index[i] = i
+    mat = np.zeros((row, col)) # generates matrix of correct shapes
+    placed = 0
+
+    for i in range(len(elems)):
+        for j in range(ratio[i]):
+            ind = index.pop(rand.randint(0, row * col - 1 - placed ))
+            col_index = ind % col
+            row_index = math.trunc(ind / col)
+            mat[row_index, col_index] = elems[i]
+            placed += 1
+    return mat
+
+if __name__ == '__main__':
+    print(genmat(1, 8, [1, 2, 3, 4, 5, 6, 7, 8], [1, 1, 1, 1, 1, 1, 1, 1]))
+```
+
+
+#### Scoring
+Using an inverted compound microscope and a three channel mechanical counter, three rotifer groups were scored: live, dead, and egg. Living rotifers were identified via movement. Dead rotifers were identified as rotifer-shaped carcasses not yet fully decomposed by bacteria._{[2]} Rotifer eggs are obvious and consistent in shape, though viability is difficult to ascertain visually. For this reason, all eggs observed are counted.
+
+###### *[2] Scoring dead rotifers may be useful in the future, but I haven't thought of an actual use case for this data yet. One issue is decomposition rate may differ as a function of bacterial abundance, which is likely correlated to rotifer density.*
+
+Preliminary tests of this scoring method show one 300 uL sample is a sufficient indicator of relative abundance (Fig 1). 
+
+```{r 24-well Test, echo=FALSE}
+
+wellTest <- read_csv(here("data","24wellCountTest.csv"))
+
+# AHHHHHH I CANT TAKE IT ANYMORE AAAAHHHHHHHHHHHHHHHH
+
+wellTestSorted <- wellTest %>%
+  group_by(wellTest$leaf) %>%
+  group_by(wellTest$clone)
+
+glimpse(wellTest)
+
+as.factor(wellTest$id)
+
+ggplot(wellTest, aes(x=id, y=countAlive, group=id)) +
+  geom_boxplot() +
+  geom_point() +
+  scale_x_continuous(breaks=c(1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+```
+
+### Results
+
+
+```{r Results, echo=FALSE}
+
+pop1 <- read_csv(here("data","pop1.csv"))
+glimpse(pop1)
+
+pop1$idFact <- as.factor(pop1$id)
+pop1$idFact
+
+ggplot(pop1, aes(x=day, y=count, group=idFact, color=idFact)) +
+  geom_point() +
+  geom_line(size=1.1) +
+  scale_color_manual(values=c("red", "green", "blue", "orange", "purple", "skyblue", "magenta", "forestgreen")) +
+  #facet_wrap(~id) +
+  labs(x="Time (days)", y="Rotifer count (0.3 mL sample)", color="Clone ID") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+```
+
+```{r, stockmath, echo=TRUE}
+
+rpermL <- 50 / 0.3
+
+rperstock <- rpermL * 100
+
+cultPerStock <- rperstock / 200
+
+```
