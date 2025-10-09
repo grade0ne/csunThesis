@@ -315,6 +315,11 @@ summary(model_protist_logr.CT, split =
           list(compFact = list("Effect of competition" = 1,
                                "Effect of rotifer evol. hist." = 2)))
 
+# 3.87 - r no comp 30
+# 2.71 - r rotif30
+
+# 43% higher w/o compRotif30 at 30
+
 ################################################################################
 # Rotifer K
 
@@ -363,9 +368,11 @@ ggplot(rotiferGraph, aes(x = competition, y = emmean, fill = evolvedTemp)) +
                 aes(ymin = emmean - SE, ymax = emmean + SE)) +
   theme_alex
 
+emm <- emmeans(model_rotifer_K.ETC, ~ evolvedTemp)
+pairs(emm, adjust = 'tukey')
 
-
-
+emm <- emmeans(model_rotifer_K.ETC, ~ competition)
+pairs(emm, adjust = 'tukey')
 ################################################################################
 # Protist K
 
@@ -402,4 +409,5 @@ summary(model_protist_K.CT, split =
 contrast(emm, list(
   comp = c(-1, 0.5, 0.5),
   evol = c(0, -1, 1)
-))
+),
+adjust = "tukey")
