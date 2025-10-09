@@ -275,6 +275,20 @@ AIC(model_rotifer_logr.E)   #
 AIC(model_rotifer_logr.T)   # 
 AIC(model_rotifer_logr.C)   # 
 
+emm <- emmeans(model_rotifer_logr.ETC, ~ competition | currentTemp)
+pairs(emm, adjust = "tukey")
+
+emm <- emmeans(model_rotifer_logr.ETC, ~ currentTemp| competition)
+pairs(emm, adjust = "tukey")
+
+emm <- emmeans(model_rotifer_logr.TC, ~ competition | currentTemp)
+pairs(emm, adjust = "tukey")
+
+emm <- emmeans(model_rotifer_logr.TC, ~ currentTemp| competition)
+pairs(emm, adjust = "tukey")
+
+
+
 ################################################################################
 # Protist r
 
@@ -322,6 +336,7 @@ AIC(model_rotifer_K.E)
 AIC(model_rotifer_K.T)
 AIC(model_rotifer_K.C)
 
+
 emm <- emmeans(model_rotifer_K.ETC, ~ evolvedTemp | competition | currentTemp)
 pairs(emm, adjust = 'tukey')
 
@@ -355,6 +370,7 @@ ggplot(rotiferGraph, aes(x = competition, y = emmean, fill = evolvedTemp)) +
 # Protist K
 
 model_protist_K.CT <- lm(K ~ currentTemp * compFact, protistResults)
+
 
 emm <- emmeans(model_protist_K.CT, ~ compFact | currentTemp)
 pairs(emm, adjust = "tukey")
