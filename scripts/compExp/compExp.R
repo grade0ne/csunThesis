@@ -1,4 +1,4 @@
-lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates','ggpattern','agricolae','emmeans')
+lbs<-c('tidyverse','car','moments','lme4','lmerTest','growthrates','ggpattern','agricolae','emmeans','broom')
 lapply(lbs,library,character.only=TRUE)
 theme_alex<-readRDS('theme_alex.rds')
 
