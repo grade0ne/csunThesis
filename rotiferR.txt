@@ -1,0 +1,10 @@
+term,sumsq,df,statistic,p.value
+(Intercept),1.8278,1,11.2096,0.0013
+evolvedTemp,0.0285,1,0.1747,0.6772
+currentTemp,1.5953,1,9.7838,0.0025
+competition,0.0765,1,0.4694,0.4955
+evolvedTemp:currentTemp,0.2332,1,1.4302,0.2356
+evolvedTemp:competition,0.202,1,1.239,0.2694
+currentTemp:competition,0.8302,1,5.0913,0.0271
+evolvedTemp:currentTemp:competition,0.1287,1,0.7895,0.3772
+Residuals,11.74,72,NA,NA
