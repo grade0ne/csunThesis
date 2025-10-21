@@ -411,3 +411,10 @@ contrast(emm, list(
   evol = c(0, -1, 1)
 ),
 adjust = "tukey")
+
+# without nocomp level
+
+protistResults_noComp <- protistResults %>%
+  filter(compFact != 'noComp')
+
+model_protist_K.CT_NC <- lm(K ~ currentTemp * compFact, protistResults_noComp)
