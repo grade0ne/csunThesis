@@ -1,0 +1,9 @@
+term,sumsq,df,statistic,p.value
+evolvedTemp,945.657,1,12.1784,8e-04
+currentTemp,749.6261,1,9.6539,0.0027
+competition,6511.885,1,83.8615,0
+evolvedTemp:currentTemp,132.7884,1,1.7101,0.1951
+evolvedTemp:competition,14.9498,1,0.1925,0.6621
+currentTemp:competition,170.6975,1,2.1983,0.1425
+evolvedTemp:currentTemp:competition,33.3361,1,0.4293,0.5144
+Residuals,5590.8346,72,NA,NA
