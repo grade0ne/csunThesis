@@ -1,0 +1,5 @@
+term,sumsq,df,statistic,p.value
+currentTemp,6.2274,1,30.9951,0
+compFact,0.6339,2,1.5774,0.2159
+currentTemp:compFact,2.1513,2,5.3536,0.0076
+Residuals,10.8495,54,NA,NA

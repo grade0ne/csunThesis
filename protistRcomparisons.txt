@@ -1,7 +1,0 @@
-currentTemp,term,contrast,null.value,estimate,std.error,df,statistic,adj.p.value
-25,compFact,noComp - rotif25,0,-0.3453,0.2005,54,-1.7224,0.2062
-25,compFact,noComp - rotif30,0,-0.248,0.2005,54,-1.2369,0.4369
-25,compFact,rotif25 - rotif30,0,0.0973,0.2005,54,0.4854,0.8785
-30,compFact,noComp - rotif25,0,0.406,0.2005,54,2.0253,0.1159
-30,compFact,noComp - rotif30,0,0.5989,0.2005,54,2.9879,0.0116
-30,compFact,rotif25 - rotif30,0,0.1929,0.2005,54,0.9625,0.6035
