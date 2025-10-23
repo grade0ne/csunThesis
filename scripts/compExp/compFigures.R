@@ -109,6 +109,30 @@ Fig2 <- ggplot(fig2Data, aes(x = currentTemp, y = btMean, color = competition, g
   theme_alex +
   theme(legend.position = 'none')
 
+supFig2Data <- as.data.frame(emmeans(model_rotifer_logr.ETC, 
+                                     ~ currentTemp * competition *evolvedTemp)) %>%
+  mutate(
+    btMean = exp(emmean),
+    btLowerCL = exp(lower.CL),
+    btUpperCL = exp(upper.CL),
+    btSE = (btUpperCL - btLowerCL) / (2 * 1.96))
+
+supFig2 <- ggplot(supFig2Data, aes(x = currentTemp, y = btMean, color = competition, group = competition)) +
+  geom_point(stat = 'identity', 
+             position = d2,
+             size = 5) +
+  geom_line(stat = 'identity', position = d2, linewidth = 1.2) +
+  geom_errorbar(stat = 'identity', 
+                position = d2, 
+                #aes(ymin = btLowerCL, ymax = btUpperCL),
+                aes(ymin = btMean - btSE, ymax = btMean + btSE),
+                width = 0.3) +
+  labs(x = 'Current Temperature (°C)', y = 'Maximum growth rate (r ± SEM)') +
+  scale_color_manual(values = c('#61bea4', '#aa3f5d')) +
+  facet_wrap(~evolvedTemp)+
+  theme_alex +
+  theme(legend.position = 'none')
+
 #### Figure 3 ####
 fig3Data <- as.data.frame(emmeans(model_protist_logr.CT, 
                                   ~ currentTemp * compFact)) %>%
@@ -212,4 +236,20 @@ Fig6b <- ggplot(fig6Data, aes(x = currentTemp, y = emmean, fill = compFact)) +
                 width = 0.4) +
   labs(x = 'Current Temperature (°C)', y = 'Carrying capacity (K ± SEM)') +
   scale_fill_manual(values = c('grey', '#2e92a2', '#ffb651')) +
+  theme_alex
+
+#### SubFig 1 ####
+
+supFig1Data <- rawData %>%
+  group_by(day, evolvedTemp) %>%
+  filter(species == 'rotifer') %>%
+  summarise(mean = mean(count),
+            se = sd(count)/sqrt(length(count)))
+
+supFig1 <- ggplot(supFig1Data, aes(x = day, y = mean, color = evolvedTemp)) +
+  geom_point(stat = 'identity') +
+  geom_line(stat='identity') +
+  geom_errorbar(stat = 'identity', aes(ymin = mean - se, ymax = mean + se)) +
+  labs(x = 'Day', y = 'Rotifer abundance (*0.1ml^-1)', color = "Evolved Temp") +
+  scale_color_manual(values = c('#2e92a2', '#ffb651')) +
   theme_alex
