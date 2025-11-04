@@ -1,0 +1,30 @@
+#-- Structural Equation Modeling --#
+
+Endogeneous variables .: dependent variables; are predicted
+Exogeneous variables  .: indepedent variables; are predictors only
+
+# Categorical variables (text ref. Grace) -
+
+Not a problem if exogeneous, requires attention if endogenous variables are categorical (still do-able, but you have to do something else first idk)
+
+# Catalina's -
+
+W_Change ~ richness + leaf_age
+Richness ~ leaf age
+
+# Maarten Speekenbrink - An R companion to Statistics
+# Chatper 11. Structural equation modelling with lavaan
+	https://mspeekenbrink.github.io/sdam-r-companion/structural-equation-modelling-with-lavaan.html#lavaan
+
+- lavaan stands for (la)tent (va)riable (an)alysis
+
+- indirect effects: label the slopes of the exogeneous variables of interest, then in a separate line, use those slope labels (aka. explicitly labeled regression parameters) to compute indirect effects like this ---
+		intention ~ 1 + a*legacy
+		donation ~ 1 + b*intention
+		ab := a*b 		# <- indirect effect of legacy on donation
+
+- in this example, intention is caused by legacy, and donation is caused by intention.
+
+- the 1 in model syntax just explicitly tells lavaan to include the intercept as predicted by the mean of the endogeneous variable(s)
+
+- model fitting: use anova() to run LRT and compare AIC / p
