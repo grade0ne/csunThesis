@@ -63,8 +63,12 @@ sem_wide <- sem_wide %>%
          lnr_R, K_R, lnr_C, K_C, evo_c, assay_c, comp01, evoXassay)
 
 #### SEM ####
-
+    
 library(lavaan)
+
+model_simple <- '
+  lnr_R ~ evolvedTemp + currentTemp + competition
+'
 
 model_single <- '
   # rotifer performance:
@@ -80,6 +84,16 @@ model_single <- '
   lnr_C ~~ K_C
 '
 
+fit_simple <- sem(
+  model_simple,
+  data = sem_wide,
+  estimator = "MLR",
+  missing = "fiml",
+  meanstructure = TRUE,
+  std.lv= TRUE,
+  std.ov = TRUE
+)
+
 fit_single <- sem(
   model_single,
   data = sem_wide,
@@ -91,6 +105,9 @@ fit_single <- sem(
 )
 
 summary(fit_single, standardized = TRUE, fit.measures = TRUE, rsquare = TRUE)
+
+summary(fit_simple, standardized = TRUE, fit.measures = TRUE, rsquare = TRUE)
+
 
 library(lavaanPlot)
 
@@ -118,6 +135,17 @@ lavaanPlot(
   graph_options = list(rankdir = "LR")  # left-to-right
 )
 
+lavaanPlot(
+  model = fit_simple,
+  coefs = TRUE,       
+  stand = TRUE,
+  sig = 0.05,
+  stars = "regress",
+  node_options = list(shape = "box", style = "filled", fillcolor = "gray95",
+                      fontname = "Helvetica", color = "grey40"),
+  edge_options = list(color = "grey35", penwidth = 1.2),
+  graph_options = list(rankdir = "LR")  # left-to-right
+)
 library(semPlot)
 
 color_vec <- c(
