@@ -2,3 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# large media kept outside git
+*.mp4
+*.gif
