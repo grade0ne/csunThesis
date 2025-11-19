@@ -238,7 +238,13 @@ Fig6b <- ggplot(fig6Data, aes(x = currentTemp, y = emmean, fill = compFact)) +
   scale_fill_manual(values = c('grey', '#2e92a2', '#ffb651')) +
   theme_alex
 
-#### SubFig 1 ####
+#### Figure 7 ####
+
+ggplot(protistResults, aes(x = mumax, y = K, color = evoRotifTemp, shape = currentTemp)) +
+  geom_point(size = 2) +
+  theme_alex
+
+#### SupFig 1 ####
 
 supFig1Data <- rawData %>%
   group_by(day, evolvedTemp) %>%
