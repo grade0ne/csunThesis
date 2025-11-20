@@ -242,6 +242,7 @@ Fig6b <- ggplot(fig6Data, aes(x = currentTemp, y = emmean, fill = compFact)) +
 
 ggplot(protistResults, aes(x = mumax, y = K, color = evoRotifTemp, shape = currentTemp)) +
   geom_point(size = 2) +
+  labs(x = "r") +
   theme_alex
 
 #### SupFig 1 ####
