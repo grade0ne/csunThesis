@@ -12,7 +12,17 @@ plot(r~alpha, rData)
 
 plot(alpha~K, rData)
 
-#evo
+pData <- pData %>%
+  mutate(alpha = mumax / K,
+         r = mumax,
+         lnr = log(r),
+         across(c(treatment, evolvedTemp, currentTemp, competition, evoRotifTemp), as.factor))
+
+plot(r~K, pData)
+plot(r~alpha, pData)
+plot(alpha~K, pData)
+
+#### rotif evo ####
 
 evoAlpha <- rData %>%
   group_by(evolvedTemp) %>%
@@ -43,7 +53,7 @@ ggplot(evoK, aes(evolvedTemp, mean)) +
 
 
 
-#temp
+#### rotif temp ####
 
 tempAlpha <- rData%>%
   group_by(currentTemp) %>%
@@ -73,7 +83,7 @@ ggplot(tempK, aes(currentTemp, mean)) +
   geom_errorbar(stat='identity', aes(ymin=mean-se, ymax=mean+se))
 
 
-# 
+#### rotif anovas ####
 model1 <- lm(log(alpha) ~ evolvedTemp * currentTemp * competition, rData)
 
 plot(model1)
@@ -110,3 +120,17 @@ model3 <- lm(K ~ evolvedTemp * currentTemp * competition, rData)
 plot(model3)
 qqp(model3, 'norm')
 Anova(model3, type="III")
+
+
+
+#### protist anovas ####
+modela <- lm(log(alpha) ~ currentTemp * evoRotifTemp, pData)
+
+library(MASS)
+modelab <- lm(boxcox(alpha) ~ evolvedTemp * currentTemp * competition, pData)
+
+Anova(modela, type="III")
+
+library(emmeans)
+emm <- emmeans(modela, ~ evoRotifTemp | currentTemp)
+pairs(emm, adjust = "tukey")
