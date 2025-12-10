@@ -238,7 +238,26 @@ Fig6b <- ggplot(fig6Data, aes(x = currentTemp, y = emmean, fill = compFact)) +
   scale_fill_manual(values = c('grey', '#2e92a2', '#ffb651')) +
   theme_alex
 
+<<<<<<< HEAD
 #### SubFig 1 ####
+=======
+#### Figure 7 ####
+
+rKGraph <- protistResults %>%
+  mutate(evoRotifTemp = fct_recode(evoRotifTemp,
+                                   "Rotifers evolved at 25C" = "25C",
+                                   "Rotifers evolved at 30C" = "30C",
+                                   "No competition" = "Protist only (25C)"))
+
+ggplot(rKGraph, aes(x = mumax, y = K, color = currentTemp, shape = evoRotifTemp)) +
+  geom_point(size = 2) +
+  labs(x = "r", color = "Temperature", shape = "Competition") +
+  facet_wrap(~evoRotifTemp) +
+  guides(shape = 'none') +
+  theme_alex
+
+#### SupFig 1 ####
+>>>>>>> 3c61508a67661a306d1cae2d3c9c95e8c40594a3
 
 supFig1Data <- rawData %>%
   group_by(day, evolvedTemp) %>%
@@ -252,4 +271,9 @@ supFig1 <- ggplot(supFig1Data, aes(x = day, y = mean, color = evolvedTemp)) +
   geom_errorbar(stat = 'identity', aes(ymin = mean - se, ymax = mean + se)) +
   labs(x = 'Day', y = 'Rotifer abundance (*0.1ml^-1)', color = "Evolved Temp") +
   scale_color_manual(values = c('#2e92a2', '#ffb651')) +
+<<<<<<< HEAD
   theme_alex
+=======
+  theme_alex 
+  
+>>>>>>> 3c61508a67661a306d1cae2d3c9c95e8c40594a3
