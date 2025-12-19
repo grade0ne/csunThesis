@@ -162,7 +162,11 @@ ggplot(rotiferGraphs, aes(x = evolvedTemp, y = mean_K, fill = competition)) +
 protistParameters <- c(y0 = 10, mumax = 1.5, K = 750)
 
 protistLowerP <- c(y0 = 0, mumax = 1e-2, K = 500)
+<<<<<<< HEAD
+protistUpperP <- c(y0 = 30, mumax = 8, K = 1500)
+=======
 protistUpperP <- c(y0 = 30, mumax = 12, K = 1500)
+>>>>>>> 3c61508a67661a306d1cae2d3c9c95e8c40594a3
 
 protistLogistic <- all_growthmodels(
   count ~ day | treatID + evolvedTemp + currentTemp + competition + species + repNum,
@@ -418,4 +422,7 @@ protistResults_noComp <- protistResults %>%
   filter(compFact != 'noComp')
 
 model_protist_K.CT_NC <- lm(K ~ currentTemp * compFact, protistResults_noComp)
+<<<<<<< HEAD
+=======
 
+>>>>>>> 3c61508a67661a306d1cae2d3c9c95e8c40594a3
