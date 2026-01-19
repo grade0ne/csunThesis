@@ -40,5 +40,18 @@ plot(area_px~temperature, data)
 model1 <- lmer(area_px~temperature + (1|site/leaf/clone_id), data)
 
 model2 <- lmer(log(area_px)~temperature + (1|site/leaf/clone_id), data)
+model2a <- lmer(log(area_px)~ (1|site/leaf/clone_id), data) #LRT similar, p 0.7
 model3 <- lm(log(area_px)~temperature, data)
 anova(model2, model3)
+
+model4 <- lm(log(area_px)~clone_id * temperature, data)
+model5 <- lm(log(area_px)~clone_id, data) # best model AIC
+library(emmeans)
+
+emm <- emmeans(model5, ~ clone_id)
+pairs <- as.data.frame(pairs(emm, adjust = "tukey")) %>%
+  filter(p.value < 0.05)
+
+model6 <- lmer(log(area_px)~site + (1|leaf/clone_id), data)
+
+
