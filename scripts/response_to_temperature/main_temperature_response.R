@@ -1,9 +1,18 @@
 library(tidyverse)
+library(stringr)
 
 popData <- read.csv("Data/tempres/tempRes2-30d.csv") %>%
   mutate(Day = Day - 3,
          across(c(Site, Leaf, Clone, Treatment, ID), as.factor),
          across(c(Day, Count), as.integer))
+
+sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
+  separate(base, into = c("unk", "culture", "image", "object"), sep = "_", convert = TRUE) %>%
+  separate(culture, into = c("siteLeaf", "clone", "replicate"), sep = "-", convert = TRUE) %>%
+  mutate(site = case_when(str_sub(siteLeaf, 1, 1) == "c" ~ 1,
+                          str_sub(siteLeaf, 1, 1) == "p" ~ 2),
+         leaf = as.factor(str_sub(siteLeaf, start = 2))
+         )
 
 INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.2)
 LOWER_PARAMS <- c(y0 = 0, r = 1e-3, alpha = 0)
