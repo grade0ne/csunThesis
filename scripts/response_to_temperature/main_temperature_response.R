@@ -1,26 +1,46 @@
 library(tidyverse)
-library(stringr)
+
+#### DATA HANDELING ####
 
 popData <- read.csv("Data/tempres/tempRes2-30d.csv") %>%
   mutate(Day = Day - 3,
          across(c(Site, Leaf, Clone, Treatment, ID), as.factor),
          across(c(Day, Count), as.integer))
 
+clone_key <- c(
+  "1" = 1,  "2" = 2,  "17" = 3,  "18" = 4,  "19" = 5,
+  "72" = 6, "73" = 7, "74" = 8, "39" = 9,  "40" = 10,
+  "42" = 11,"75" = 12,"26" = 13,"25" = 14,"35" = 15,
+  "36" = 16,"37" = 17
+)
+
 sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
   separate(base, into = c("unk", "culture", "image", "object"), sep = "_", convert = TRUE) %>%
   separate(culture, into = c("siteLeaf", "clone", "replicate"), sep = "-", convert = TRUE) %>%
-  mutate(site = case_when(str_sub(siteLeaf, 1, 1) == "c" ~ 1,
-                          str_sub(siteLeaf, 1, 1) == "p" ~ 2),
-         leaf = as.factor(str_sub(siteLeaf, start = 2))
-         )
-
-INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.2)
-LOWER_PARAMS <- c(y0 = 0, r = 1e-3, alpha = 0)
-UPPER_PARAMS <- c(y0 = 2, r = 8, alpha = Inf)
+  mutate(site = as.integer(case_when(str_sub(siteLeaf, 1, 1) == "c" ~ 1,
+                                     str_sub(siteLeaf, 1, 1) == "p" ~ 2)),
+         leaf = str_sub(siteLeaf, start = 2),
+         leaf = as.integer(case_when(leaf == "23" ~ 1,
+                                     leaf == "7"  ~ 2,
+                                     leaf == "36" & site == "1" ~ 3,
+                                     leaf == "36" & site == "2" ~ 4,
+                                     leaf == "24" ~ 5,
+                                     leaf == "3"  ~ 6)),
+         clone = as.integer(unname(clone_key[as.character(clone)])),
+         temperature = as.factor(case_when(replicate %in% c(1, 2, 3) ~ "25C",
+                                           replicate %in% c(4, 5, 6) ~ "30C"))
+         ) %>%
+  select(
+    temperature, site, leaf, clone, area_px
+)
 
 #### GROWTH MODELS ####
 
 library(growthrates)
+
+INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.2)
+LOWER_PARAMS <- c(y0 = 0, r = 1e-3, alpha = 0)
+UPPER_PARAMS <- c(y0 = 2, r = 8, alpha = Inf)
 
 # Defining custom function per Part 2, sec. 4 of growthrates documentation
 logistic_alpha_function <- function(time, parms) {
