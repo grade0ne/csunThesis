@@ -1,6 +1,6 @@
 library(tidyverse)
 
-#### DATA HANDELING ####
+#### DATA HANDLING ####
 
 popData <- read.csv("Data/tempres/tempRes2-30d.csv") %>%
   mutate(Day = Day - 3,
