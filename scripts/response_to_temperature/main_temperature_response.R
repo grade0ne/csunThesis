@@ -39,8 +39,8 @@ sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
 library(growthrates)
 
 INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.2)
-LOWER_PARAMS <- c(y0 = 0, r = 1e-3, alpha = 0)
-UPPER_PARAMS <- c(y0 = 2, r = 8, alpha = Inf)
+LOWER_PARAMS <- c(y0 = 0, r = 0.001, alpha = 0.001)
+UPPER_PARAMS <- c(y0 = 5, r = 8, alpha = 1)
 
 # Defining custom function per Part 2, sec. 4 of growthrates documentation
 logistic_alpha_function <- function(time, parms) {
@@ -88,7 +88,7 @@ plot_models <- function(models) {
   rows <- columns + 1
   par(mfrow = c(columns, rows), mar = c(1, 1, 1, 1))
   
-  for (i in seq_along(models)) {
+  for (i in seq_along(model_ids)) {
     plot(models[[i]])
     
     this_r <- round(coefs$r[i], 6)
