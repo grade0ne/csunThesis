@@ -30,9 +30,9 @@ sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
          temperature = as.factor(case_when(replicate %in% c(1, 2, 3) ~ "25C",
                                            replicate %in% c(4, 5, 6) ~ "30C"))
          ) %>%
-  select(
-    temperature, site, leaf, clone, area_px
-)
+  #select(
+  #  temperature, site, leaf, clone, area_px) %>%
+  mutate(across(c(temperature, site, leaf, clone), factor))
 
 #### GROWTH MODELS ####
 
@@ -125,3 +125,90 @@ summarize_models <- function(models) {
   rownames(out) <- NULL
   out
 }
+
+#### ANOVA ####
+library(car)
+library(moments)
+library(lme4)
+library(lmerTest)
+
+summaryData <- results(models) %>%
+  mutate(across(c(Treatment, Site, Leaf, Clone), factor))
+
+# growth rate
+model1 <- lmer(log(r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
+model2 <- lmer((1/r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
+
+model2a <- lmer((1/r) ~ Treatment + (1|Site) + (1|Leaf) + (1|Clone), summaryData)
+
+# size
+model3 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
+
+#### FIGUES ####
+
+## growth rate - total variance: 7.768
+
+# Temperature: F(1,95)=11.009, p=0.0013
+graphdata1 <- summaryData %>% group_by(Treatment) %>% 
+  summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
+ggplot(graphdata1, aes(x = Treatment, y = mean)) +
+  geom_bar(stat='identity') +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se)) +
+  labs(y="intrinsic growth rate (r)")
+
+# Site: 1.74% of variance
+graphdata2 <- summaryData %>% group_by(Treatment, Site) %>% summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
+ggplot(graphdata2, aes(x = Site, y = mean, fill = Treatment)) +
+geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="intrinsic growth rate (r)")
+
+# Leaf: 11.18% of variance
+graphdata3 <- summaryData %>% group_by(Treatment, Leaf) %>% summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
+ggplot(graphdata3, aes(x = Leaf, y = mean, fill = Treatment)) +
+  geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="intrinsic growth rate (r)")
+
+# Clone: 0% of variance?
+graphdata4 <- summaryData %>% group_by(Treatment, Clone) %>% summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
+ggplot(graphdata4, aes(x = Clone, y = mean, fill = Treatment)) +
+  geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="intrinsic growth rate (r)")
+
+
+## size - total variance: 0.07198877
+
+# Temperature: F(2,2108)=0.200, p=0.655
+graphdata5 <- sizeData %>% group_by(temperature) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
+ggplot(graphdata5, aes(x = temperature, y = mean, fill = temperature)) +
+  geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="body size (px^2)")
+
+# Site: 0.27% of variance
+graphdata6 <- sizeData %>% group_by(temperature, site) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
+ggplot(graphdata6, aes(x = site, y = mean, fill = temperature)) +
+  geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="body size (px^2)")
+
+# Leaf: 0.03% of variance
+graphdata7 <- sizeData %>% group_by(temperature, leaf) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
+ggplot(graphdata7, aes(x = leaf, y = mean, fill = temperature)) +
+  geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="body size (px^2)")
+
+# Clone: 0.72% of variance
+graphdata8 <- sizeData %>% group_by(temperature, clone) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
+ggplot(graphdata8, aes(x = clone, y = mean, fill = temperature)) +
+  geom_bar(stat='identity', position=position_dodge(width = 1)) +
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
+  labs(y="body size (px^2)")
+  
+
+sampleSummary <- sizeData %>%
+  group_by(clone) %>% summarize(n25 = sum(temperature=="25C"),
+                                n30 = sum(temperature=="30C"))
