@@ -136,13 +136,19 @@ summaryData <- results(models) %>%
   mutate(across(c(Treatment, Site, Leaf, Clone), factor))
 
 # growth rate
+
+model0 <- lmer(r ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
+
 model1 <- lmer(log(r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
-model2 <- lmer((1/r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
+model2 <- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
 
 model2a <- lmer((1/r) ~ Treatment + (1|Site) + (1|Leaf) + (1|Clone), summaryData)
 
+model3 <- lm((1/r) ~ Treatment * Clone, summaryData)
+model3a <- lmer((1/r) ~ Treatment + (1|Clone), summaryData)
+
 # size
-model3 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
+model4 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
 
 #### FIGUES ####
 
