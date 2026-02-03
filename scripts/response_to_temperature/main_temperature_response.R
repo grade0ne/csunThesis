@@ -38,9 +38,9 @@ sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
 
 library(growthrates)
 
-INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.2)
+INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.005)
 LOWER_PARAMS <- c(y0 = 0, r = 0.001, alpha = 0.001)
-UPPER_PARAMS <- c(y0 = 5, r = 8, alpha = 1)
+UPPER_PARAMS <- c(y0 = 5, r = 2, alpha = 1)
 
 # Defining custom function per Part 2, sec. 4 of growthrates documentation
 logistic_alpha_function <- function(time, parms) {
@@ -146,9 +146,27 @@ model2a <- lmer((1/r) ~ Treatment + (1|Site) + (1|Leaf) + (1|Clone), summaryData
 
 model3 <- lm((1/r) ~ Treatment * Clone, summaryData)
 model3a <- lmer((1/r) ~ Treatment + (1|Clone), summaryData)
+model3b<- lmer((1/r) ~ Treatment + (1|Leaf/Clone), summaryData)
+model3c<- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), summaryData)
+model3d<- lmer((1/r) ~ Treatment + (1|Site/Leaf), summaryData)
+model3e<- lmer((1/r) ~ Treatment + (1|Site), summaryData)
+
+model4 <- lm(r ~ Treatment * Clone, summaryData)
+model4a<- lmer(r ~ Treatment + (1|Clone), summaryData)
+model4b<- lmer(r ~ Treatment + (1|Leaf/Clone), summaryData)
+model4c<- lmer(r ~ Treatment + (1|Site/Leaf/Clone), summaryData)
+model4d<- lmer(r ~ Treatment + (1|Site/Leaf), summaryData)
+model4e<- lmer(r ~ Treatment + (1|Site), summaryData)
+
+m_base  <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1|Site:Leaf:Clone), data=summaryData)
+
+m_rxn   <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1 + Treatment|Site:Leaf:Clone), data=summaryData)
+
+anova(update(m_base, REML=FALSE), update(m_rxn, REML=FALSE))
+VarCorr(m_rxn)
 
 # size
-model4 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
+model5 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
 
 #### FIGUES ####
 
