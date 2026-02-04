@@ -116,6 +116,7 @@ summarize_models <- function(models) {
     
     table$term <- rownames(table)
     table$model_id <- fit_id
+    table$r2 <- rsquared(fit)
     rownames(table) <- NULL
     
     out_list[[i]] <- table
@@ -162,13 +163,67 @@ m_base  <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1|Site:Leaf:Clone),
 
 m_rxn   <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1 + Treatment|Site:Leaf:Clone), data=summaryData)
 
-anova(update(m_base, REML=FALSE), update(m_rxn, REML=FALSE))
-VarCorr(m_rxn)
+model5 <- lmer(log(r) ~ Treatment + (1 | Site) + (1 | Site:Leaf) + 
+                        (0 + Treatment | Site:Leaf:Clone), data = summaryData)
+
+
+summaryData$Tr <- ifelse(summaryData$Treatment == "30C", 0.5, -0.5)
+# neg. eigenvalues from having treatment as factor, switched to contrast
+
+
+
+model6 <- lmer(log(r) ~ Tr + (1 + Tr | Site:Leaf:Clone), data = summaryData)
+# failed to converge, neg. eigenvalue(?) - probably b/c 0 variance in clone @ 25C
+
+                                    #*#
+model7 <- lmer(log(r) ~ Tr + (0 + Tr | Site:Leaf:Clone), data = summaryData)
+# 
+
+
+model8 <- lmer(r ~ Tr + (1|Site) + (1|Site:Leaf) +
+              (1 + Tr | Site:Leaf:Clone),
+              data = summaryData)
+
+model9 <- lmer(r ~ Tr + 
+              (1 + Tr | Site) + 
+              (1 + Tr | Site:Leaf) +
+              (1 + Tr | Site:Leaf:Clone),
+              data = summaryData)
+
+model9a <- lmer(r ~ Tr +
+              (1 | Site:Leaf) +
+              (1 + Tr | Site:Leaf:Clone), data = summaryData)
+
+model9b <- lmer(r ~ Tr +
+              (1 + Tr | Site:Leaf) +
+              (1 + Tr | Site:Leaf:Clone), data = summaryData)
+
+model9c <- lmer(r ~ Treatment + (1 + Treatment | Site:Leaf:Clone), data = summaryData)
+
+model9d <- lmer(r ~ Treatment + (0 + Treatment | Site:Leaf:Clone), data = summaryData)
+
+model9e <- lmer(r ~ Treatment + (1 + Treatment | Site:Leaf) + (1 + Treatment | Site:Leaf:Clone), data = summaryData)
+
+## Model Testing:
+
+t1a <- model9
+t1b <- model9b # Better fit (x2 = 0, p = 1)
+anova(model9, model9b)
+
+t2a <- t1b
+t2b <- model9a # Better fit (x2 = 2.38, p = 0.304)
+anova(t2a, t2b)
+
+t3a <- t2b
+t3b <-
+
+# still not normal w/ ln; gamma link=log?
 
 # size
-model5 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
+model9 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
 
 #### FIGUES ####
+theme_alex<-readRDS('theme_alex.rds')
 
 ## growth rate - total variance: 7.768
 
@@ -179,6 +234,16 @@ ggplot(graphdata1, aes(x = Treatment, y = mean)) +
   geom_bar(stat='identity') +
   geom_errorbar(aes(ymin=mean-se, ymax=mean+se)) +
   labs(y="intrinsic growth rate (r)")
+
+graphdata1a <- summaryData %>% group_by(Treatment, Leaf, Clone) %>%
+  summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
+ggplot(graphdata1a, aes(x = Treatment, y = mean, color = Leaf, group = Clone)) +
+  geom_point(stat='identity', position = position_dodge(width=0.15)) +
+  geom_line(stat='identity', position = position_dodge(width=0.15)) +
+  labs(x="Temperature", y="Growth rate") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
 
 # Site: 1.74% of variance
 graphdata2 <- summaryData %>% group_by(Treatment, Site) %>% summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
