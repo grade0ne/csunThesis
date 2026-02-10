@@ -1,6 +1,6 @@
 library(tidyverse)
 
-#### DATA HANDLING ####
+#-------------- Data Handling --------------
 
 popData <- read.csv("Data/tempres/tempRes2-30d.csv") %>%
   mutate(Day = Day - 3,
@@ -32,9 +32,11 @@ sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
          ) %>%
   #select(
   #  temperature, site, leaf, clone, area_px) %>%
-  mutate(across(c(temperature, site, leaf, clone), factor))
+  mutate(across(c(temperature, site, leaf, clone), factor)) %>%
+  filter_out(clone=="6")
+  
 
-#### GROWTH MODELS ####
+#-------------- Growth Models --------------
 
 library(growthrates)
 
@@ -127,7 +129,7 @@ summarize_models <- function(models) {
   out
 }
 
-#### ANOVA ####
+#-------------- Model Building -------------- 
 library(car)
 library(moments)
 library(lme4)
@@ -136,73 +138,141 @@ library(lmerTest)
 summaryData <- results(models) %>%
   mutate(across(c(Treatment, Site, Leaf, Clone), factor))
 
-# growth rate
-
-model0 <- lmer(r ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
-
-model1 <- lmer(log(r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
-model2 <- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
-
-model2a <- lmer((1/r) ~ Treatment + (1|Site) + (1|Leaf) + (1|Clone), summaryData)
-
-model3 <- lm((1/r) ~ Treatment * Clone, summaryData)
-model3a <- lmer((1/r) ~ Treatment + (1|Clone), summaryData)
-model3b<- lmer((1/r) ~ Treatment + (1|Leaf/Clone), summaryData)
-model3c<- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), summaryData)
-model3d<- lmer((1/r) ~ Treatment + (1|Site/Leaf), summaryData)
-model3e<- lmer((1/r) ~ Treatment + (1|Site), summaryData)
-
-model4 <- lm(r ~ Treatment * Clone, summaryData)
-model4a<- lmer(r ~ Treatment + (1|Clone), summaryData)
-model4b<- lmer(r ~ Treatment + (1|Leaf/Clone), summaryData)
-model4c<- lmer(r ~ Treatment + (1|Site/Leaf/Clone), summaryData)
-model4d<- lmer(r ~ Treatment + (1|Site/Leaf), summaryData)
-model4e<- lmer(r ~ Treatment + (1|Site), summaryData)
-
-m_base  <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1|Site:Leaf:Clone), data=summaryData)
-
-m_rxn   <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1 + Treatment|Site:Leaf:Clone), data=summaryData)
-
-model5 <- lmer(log(r) ~ Treatment + (1 | Site) + (1 | Site:Leaf) + 
-                        (0 + Treatment | Site:Leaf:Clone), data = summaryData)
-
-
 summaryData$Tr <- ifelse(summaryData$Treatment == "30C", 0.5, -0.5)
-# neg. eigenvalues from having treatment as factor, switched to contrast
+
+model_raw_r <- lmer(r ~ Tr + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
+
+  vars <- c(
+    clone30 = 1.071e-08,
+    leaf30 = 6.212e-02,
+    leaf25 = 1.969e-02,
+    resid = 1.528e-01)
+  total_var <- sum(vars)
+  
+  var_df <- data.frame(
+    source = c(names(vars), "total"),
+    variance = c(vars, total_var),
+    percent = c(vars / total_var * 100, 100),
+    row.names = NULL)
+
+model_inv_sqrt_r <- lmer((1/sqrt(r)) ~ Tr + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
+  
+  hist(1/sqrt(summaryData$r))
+  abline(v=mean(1/sqrt(summaryData$r)))
+  
+  skewness(1/sqrt(summaryData$r))
+  kurtosis(1/sqrt(summaryData$r))
+  
+  qqp(resid(model_inverse), 'norm')
+  
+  plot(resid(model_inv_sqrt)~fitted(model_inv_sqrt))
+  abline(h=0)
+
+
+sizeData$Tr <- ifelse(sizeData$temperature == "30C", 0.5, -0.5)
+  
+model_full_size <- lmer(area_px ~ Tr * site + (1+Tr || site:leaf) + (1+Tr || site:leaf:clone), sizeData)
+
+  vars <- c(
+    clone30 = 4.283e+03,
+    leaf30 = 1.506e-04,
+    leaf25 = 4.345e+03,
+    resid = 1.217e+06)
+  total_var <- sum(vars)
+  
+  var_df <- data.frame(
+    source = c(names(vars), "total"),
+    variance = c(vars, total_var),
+    percent = c(vars / total_var * 100, 100),
+    row.names = NULL)
 
 
 
-model6 <- lmer(log(r) ~ Tr + (1 + Tr | Site:Leaf:Clone), data = summaryData)
-# failed to converge, neg. eigenvalue(?) - probably b/c 0 variance in clone @ 25C
-
-                                    #*#
-model7 <- lmer(log(r) ~ Tr + (0 + Tr | Site:Leaf:Clone), data = summaryData)
-# 
 
 
-model8 <- lmer(r ~ Tr + (1|Site) + (1|Site:Leaf) +
-              (1 + Tr | Site:Leaf:Clone),
-              data = summaryData)
+sizeLeafData <- sizeData %>% group_by(temperature, leaf, clone) %>%
+  summarize(mean = mean(area_px), n = length(area_px), se = sd(area_px)/sqrt(length(area_px)))
 
-model9 <- lmer(r ~ Tr + 
-              (1 + Tr | Site) + 
-              (1 + Tr | Site:Leaf) +
-              (1 + Tr | Site:Leaf:Clone),
-              data = summaryData)
+ggplot(sizeLeafData, aes(x = temperature, y = mean, group=clone, color = leaf)) +
+  geom_point(stat = 'identity', position = position_dodge(width = .2)) +
+  geom_line(position = position_dodge(width = .2)) +
+  geom_errorbar(stat = 'identity', position = position_dodge(width = .2),
+                aes(ymin = mean - se, ymax = mean + se)) +
+  theme_bw()
+  
 
-model9a <- lmer(r ~ Tr +
-              (1 | Site:Leaf) +
-              (1 + Tr | Site:Leaf:Clone), data = summaryData)
+# ------------ Un-used Models ----------------
+  # growth rate
+  
+  #model0 <- lmer(r ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
+  #
+  #model1 <- lmer(log(r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
+  #model2 <- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
+  #
+  #model2a <- lmer((1/r) ~ Treatment + (1|Site) + (1|Leaf) + (1|Clone), summaryData)
+  #
+  #model3 <- lm((1/r) ~ Treatment * Clone, summaryData)
+  #model3a <- lmer((1/r) ~ Treatment + (1|Clone), summaryData)
+  #model3b<- lmer((1/r) ~ Treatment + (1|Leaf/Clone), summaryData)
+  #model3c<- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), summaryData)
+  #model3d<- lmer((1/r) ~ Treatment + (1|Site/Leaf), summaryData)
+  #model3e<- lmer((1/r) ~ Treatment + (1|Site), summaryData)
+  #
+  #model4 <- lm(r ~ Treatment * Clone, summaryData)
+  #model4a<- lmer(r ~ Treatment + (1|Clone), summaryData)
+  #model4b<- lmer(r ~ Treatment + (1|Leaf/Clone), summaryData)
+  #model4c<- lmer(r ~ Treatment + (1|Site/Leaf/Clone), summaryData)
+  #model4d<- lmer(r ~ Treatment + (1|Site/Leaf), summaryData)
+  #model4e<- lmer(r ~ Treatment + (1|Site), summaryData)
+  #
+  #m_base  <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1|Site:Leaf:Clone), data=summaryData)
+  #
+  #m_rxn   <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1 + Treatment|Site:Leaf:Clone), data=summaryData)
+  #
+  #model5 <- lmer(log(r) ~ Treatment + (1 | Site) + (1 | Site:Leaf) + 
+  #                        (0 + Treatment | Site:Leaf:Clone), data = summaryData)
+  #
+  #
+  #summaryData$Tr <- ifelse(summaryData$Treatment == "30C", 0.5, -0.5)
+  ## to remove correlations between random effects using '||', factors have to be replaced by
+  ## an explicit contrast-coded predictor
+  #
+  #summaryData$Treatment <- as.factor(summaryData$Treatment)
+  #contrasts(summaryData$Treatment) <- c(-1/2, 1/2)
+  #
+  #
+  #model6 <- lmer(log(r) ~ Tr + (1 + Tr | Site:Leaf:Clone), data = summaryData)
+  ## failed to converge, neg. eigenvalue(?) - probably b/c 0 variance in clone @ 25C
+  #
+  #                                    #*#
+  #model7 <- lmer(log(r) ~ Tr + (0 + Tr | Site:Leaf:Clone), data = summaryData)
+  ## 
+  #
+  #
+  #model8 <- lmer(r ~ Tr + (1|Site) + (1|Site:Leaf) +
+  #              (1 + Tr | Site:Leaf:Clone),
+  #              data = summaryData)
+  #
+  #model9a <- lmer(r ~ Tr + (1 + Tr | Site) + (1 + Tr | Site:Leaf) + (1 + Tr | Site:Leaf:Clone), data = summaryData)
+  #
+  #model9b <- lmer(r ~ Tr + (1 + Tr | Site:Leaf) + (1 + Tr | Site:Leaf:Clone), data = summaryData)
+  #
+  #model9e <- lmer(r ~ Treatment + (0 + Treatment | Site:Leaf:Clone), data = summaryData)
+  #
+  #model9f <- lmer(r ~ Treatment + (1 + Treatment | Site:Leaf) + (1 + Treatment | Site:Leaf:Clone), data = summaryData)
+  #
+  #model10 <- lmer(r ~ Treatment + Site + (1 + Treatment | Site:Leaf) + (1 + Treatment | Site:Leaf:Clone), summaryData)
+  #
+  #model11 <- lmer(r ~ Tr + Site + (1+Tr || Site/Leaf) + (1+Tr || Site/Leaf/Clone), summaryData)
+  #
+  #
+  #model12 <- lmer(r ~ Tr + (1+Tr || Site:Leaf) + (1+Tr || Site:Leaf:Clone), summaryData)
+  #
+  #model13 <- lmer(r ~ Tr + Site + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
 
-model9b <- lmer(r ~ Tr +
-              (1 + Tr | Site:Leaf) +
-              (1 + Tr | Site:Leaf:Clone), data = summaryData)
 
-model9c <- lmer(r ~ Treatment + (1 + Treatment | Site:Leaf:Clone), data = summaryData)
 
-model9d <- lmer(r ~ Treatment + (0 + Treatment | Site:Leaf:Clone), data = summaryData)
 
-model9e <- lmer(r ~ Treatment + (1 + Treatment | Site:Leaf) + (1 + Treatment | Site:Leaf:Clone), data = summaryData)
 
 ## Model Testing:
 
@@ -222,7 +292,14 @@ t3b <-
 # size
 model9 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
 
-#### FIGUES ####
+
+
+
+
+
+
+
+# ------------ Data Vis ----------------
 theme_alex<-readRDS('theme_alex.rds')
 
 ## growth rate - total variance: 7.768
@@ -267,18 +344,20 @@ ggplot(graphdata4, aes(x = Clone, y = mean, fill = Treatment)) +
   labs(y="intrinsic growth rate (r)")
 
 
-## size - total variance: 0.07198877
+## size
 
-# Temperature: F(2,2108)=0.200, p=0.655
+# Temperature:
 graphdata5 <- sizeData %>% group_by(temperature) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
 ggplot(graphdata5, aes(x = temperature, y = mean, fill = temperature)) +
   geom_bar(stat='identity', position=position_dodge(width = 1)) +
   geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
   labs(y="body size (px^2)")
 
-# Site: 0.27% of variance
+# Site:
 graphdata6 <- sizeData %>% group_by(temperature, site) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
-ggplot(graphdata6, aes(x = site, y = mean, fill = temperature)) +
+ggplot(graphdata6, aes(x = site, y = mean
+                       #, fill = temperature
+                       )) +
   geom_bar(stat='identity', position=position_dodge(width = 1)) +
   geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
   labs(y="body size (px^2)")
