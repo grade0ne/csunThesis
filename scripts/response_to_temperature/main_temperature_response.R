@@ -63,7 +63,7 @@ grow_logistic_alpha <- growthmodel(
 # Test data for custom alpha function
 # it's fun to play with alpha--use for defense explanation of logistic?
 time <- 1:30
-out <- grow_logistic_alpha(time, parms = list(y0 = 1, r = 0.5, alpha = 0.5))
+out <- grow_logistic_alpha(time, parms = list(y0 = 0, r = 1.1, alpha = 0.02))
 plot(out[, "time"], out[, "y"], type = "b")
 
 
@@ -163,11 +163,20 @@ model_inv_sqrt_r <- lmer((1/sqrt(r)) ~ Tr + (1+Tr || Site:Leaf) + (0+Tr || Site:
   skewness(1/sqrt(summaryData$r))
   kurtosis(1/sqrt(summaryData$r))
   
-  qqp(resid(model_inverse), 'norm')
+  qqp(resid(model_inv_sqrt_r), 'norm')
   
-  plot(resid(model_inv_sqrt)~fitted(model_inv_sqrt))
+  plot(resid(model_inv_sqrt_r)~fitted(model_inv_sqrt_r))
   abline(h=0)
 
+library(emmeans)
+
+emm <- summary(emmeans(model_inv_sqrt_r, ~ Tr))
+emm$r <- 1 / (emm$emmean^2)
+emm$r_lower <- 1 / (emm$upper.CL^2)    # note: intervals flip
+emm$r_upper <- 1 / (emm$lower.CL^2)
+emm$r_ci <- emm$r_upper - emm$r
+
+r_lm_result <- emm
 
 sizeData$Tr <- ifelse(sizeData$temperature == "30C", 0.5, -0.5)
   
@@ -305,6 +314,11 @@ theme_alex<-readRDS('theme_alex.rds')
 ## growth rate - total variance: 7.768
 
 # Temperature: F(1,95)=11.009, p=0.0013
+ggplot(r_lm_result, aes(x = Tr, y = r)) +
+  geom_bar(stat="identity") +
+  geom_errorbar(stat="identity", aes(ymin=r-r_lower, ymax=r+r_upper))
+
+
 graphdata1 <- summaryData %>% group_by(Treatment) %>% 
   summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
 ggplot(graphdata1, aes(x = Treatment, y = mean)) +
