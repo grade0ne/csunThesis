@@ -17,41 +17,60 @@ data <- raw_data %>%
          n_protist = prot_temp * 6.8) %>%
   select(day, replicate, spec_pres, evol_temp, expr_temp, comp_fact, n_rotifer, n_protist)
 
-# time series rotifer counts
-figure1_df <- data %>%
-  filter(spec_pres %in% c("rotifer", "both")) %>%
-  group_by(day, expr_temp, comp_fact) %>%
-  summarize(mean = mean(n_rotifer), se = sd(n_rotifer)/sqrt(length(n_rotifer)))
 
-ggplot(figure1_df, aes(x = day, y = mean, color = comp_fact, group = expr_temp)) + 
-  geom_point(stat = "identity", position = position_dodge(width = 0.6))
+# ---------- Plots -------------
 
-# three-factor bar rotifer d11
+# Rotifers
 figure2_df <- data %>%
   filter(spec_pres %in% c("rotifer", "both"),
          day == "11") %>%
   group_by(evol_temp, expr_temp, comp_fact) %>%
+  mutate(evol_temp = case_when(evol_temp == "25C" ~ "History of 25C",
+                               evol_temp == "30C" ~ "History of 30C")) %>%
   summarize(mean = mean(n_rotifer), se = sd(n_rotifer)/sqrt(length(n_rotifer)))
 
 ggplot(figure2_df, aes(x = expr_temp, y = mean, fill = comp_fact)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.5) + 
-  geom_errorbar(stat = "identity", position = position_dodge(width = 0.8), aes(ymin = mean - se, ymax = mean + se), width = 0.4) +
-  facet_wrap(~evol_temp)
+  geom_errorbar(stat = "identity", position = position_dodge(width = 0.8), 
+                aes(ymin = mean - se, ymax = mean + se), width = 0.4) +
+  labs(x = "Experiment Temp", y = expression("Rotifers on day 11 (0.1 "*ml^-1*")"), fill = "Competition") +
+  facet_wrap(~evol_temp) +
+  scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+  theme_bw() +
+  theme(
+    plot.background = element_blank(),
+    panel.grid = element_blank()
+  )
 
-# evol only rotifer d11
+
+# Protists
 figure3_df <- data %>%
-  filter(spec_pres %in% c("rotifer", "both"),
+  filter(spec_pres %in% c("protist", "both"),
          day == "11") %>%
-  group_by(evol_temp) %>%
-  summarize(mean = mean(n_rotifer), se = sd(n_rotifer)/sqrt(length(n_rotifer)))
-  
-ggplot(figure3_df, aes(x = evol_temp, y = mean)) +
-  geom_bar(stat="identity") +
-  geom_errorbar(stat="identity", aes(ymin=mean-se,ymax=mean+se))
+  group_by(evol_temp, expr_temp, comp_fact) %>%
+  mutate(evol_temp = case_when(evol_temp == "25C" ~ "History of 25C",
+                               evol_temp == "30C" ~ "History of 30C")) %>%
+  summarize(mean = mean(n_protist), se = sd(n_protist)/sqrt(length(n_protist)))
+
+ggplot(figure3_df, aes(x = expr_temp, y = mean, fill = comp_fact)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.5) + 
+  geom_errorbar(stat = "identity", position = position_dodge(width = 0.8), 
+                aes(ymin = mean - se, ymax = mean + se), width = 0.4) +
+  labs(x = "Experiment Temp", y = expression("Protists on day 11 (0.1 "*ml^-1*")"), fill = "Competition") +
+  facet_wrap(~evol_temp) +
+  scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+  theme_bw() +
+  theme(
+    plot.background = element_blank(),
+    panel.grid = element_blank()
+  )
+
+
+# ---------- Linear Models -------------
 
 library(car)
 library(moments)
-  
+
 # rotifer d11
 lm_df <- data %>%
   filter(spec_pres %in% c("rotifer", "both"),
@@ -68,3 +87,4 @@ lm_df2 <- data %>%
   group_by(evol_temp, expr_temp, comp_fact)
 
 model2 <- lm(n_protist ~ evol_temp * expr_temp * comp_fact, data = lm_df2)
+model3 <- lm(log(n_protist) ~ evol_temp * expr_temp * comp_fact, data = lm_df2)

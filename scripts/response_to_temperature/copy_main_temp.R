@@ -40,53 +40,6 @@ sizeData <- read.csv("Data/sizeData/diversitySizeData.csv") %>%
 
 library(growthrates)
 
-INIT_PARAMS <- c(y0 = 1, r = 0.3, alpha = 0.005)
-LOWER_PARAMS <- c(y0 = 0, r = 0.001, alpha = 0.001)
-UPPER_PARAMS <- c(y0 = 5, r = 2, alpha = 1)
-
-# Defining custom function per Part 2, sec. 4 of growthrates documentation
-logistic_alpha_function <- function(time, parms) {
-  y0    <- parms[["y0"]]
-  r     <- parms[["r"]]
-  alpha <- parms[["alpha"]]
-  
-  y <- (r * y0) / (alpha * y0 + (r - alpha * y0) * exp(-r * time))
-  
-  cbind(time = time, y = y)
-}
-
-grow_logistic_alpha <- growthmodel(
-  logistic_alpha_function,
-  pnames = c("y0", "r", "alpha")
-)
-
-# Test data for custom alpha function
-# it's fun to play with alpha--use for defense explanation of logistic?
-time <- 1:30
-out <- grow_logistic_alpha(time, parms = list(y0 = 3, r = 0.5, alpha = 0.001))
-plot(out[, "time"], out[, "y"], type = "b")
-
-
-
-# Fit logistic growth model to growth data set. Returns multiple nonlinear fits.
-# usage: 'model_object_name' <- fit_models()
-fit_models <- function(initial = INIT_PARAMS, lower = LOWER_PARAMS, upper = UPPER_PARAMS) {
-  all_growthmodels(
-    Count ~ Day | Treatment + Site + Leaf + Clone + ID, # CUSTOMIZE TO DATA SET
-    data = popData, # CUSTOMIZE TO DATA SET
-    p = initial,
-    upper = upper,
-    lower = lower,
-    FUN = grow_logistic_alpha
-  )
-}
-
-fit_models_spline <- function() {
-  all_splines(Count ~ Day | Treatment + Site + Leaf + Clone + ID,
-              data = popData,
-              spar = 0.5)
-}
-
 popData$Count1 <- popData$Count + 1
 
 models <- all_splines(Count1 ~ Day | Treatment + Site + Leaf + Clone + ID,
@@ -113,33 +66,9 @@ plot_models <- function(models) {
   }
 }
 
-# model summaries
-summarize_models <- function(models) {
-  
-  ids <- rownames(coef(models))
-  out_list <- list()
-  
-  for (i in seq_along(ids)) {
-    fit_id <- ids[i]
-    fit <- models[[fit_id]]
-    
-    summary <- summary(fit)
-    table <- as.data.frame(summary$par)
-    
-    table$term <- rownames(table)
-    table$model_id <- fit_id
-    table$r2 <- rsquared(fit)
-    rownames(table) <- NULL
-    
-    out_list[[i]] <- table
-  }
-  
-  out <- do.call(rbind, out_list)
-  rownames(out) <- NULL
-  out
-}
 
-#-------------- Model Building -------------- 
+
+#-------------- Linear Mixed Models -------------- 
 library(car)
 library(moments)
 library(lme4)
@@ -150,11 +79,12 @@ summaryData <- results(models) %>%
 
 summaryData$Tr <- ifelse(summaryData$Treatment == "30C", 0.5, -0.5)
 
-model_raw_r <- lmer(r ~ Tr + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
-model_raw_r <- lmer(mumax ~ Tr + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
 
-model_full <- lmer(mumax ~ Tr + (1+Tr | Site:Leaf) + (1+Tr | Site:Leaf:Clone), summaryData)
-model_full2 <- lmer(mumax ~ Tr + Site + (1+Tr | Site:Leaf) + (1+Tr | Site:Leaf:Clone), summaryData)
+# with leaf
+model_1 <- lmer(mumax ~ Tr + (1|Site:Leaf) + (0 + Tr|Site:Leaf) +
+                  (1|Site:Leaf:Clone) + (0 + Tr|Site:Leaf:Clone), summaryData)
+# clone only
+model_2 <- lmer(mumax ~ Tr + (1|Site:Leaf:Clone) + (0 + Tr|Site:Leaf:Clone), summaryData)
 
 vars <- c(
   clone25 = 3.028e-04,
@@ -170,290 +100,134 @@ var_df <- data.frame(
   percent = c(vars / total_var * 100, 100),
   row.names = NULL)
 
-model_inv_sqrt_r <- lmer((1/sqrt(r)) ~ Tr + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
-
-hist(1/sqrt(summaryData$r))
-abline(v=mean(1/sqrt(summaryData$r)))
-
-skewness(1/sqrt(summaryData$r))
-kurtosis(1/sqrt(summaryData$r))
-
-qqp(resid(model_inv_sqrt_r), 'norm')
-
-plot(resid(model_inv_sqrt_r)~fitted(model_inv_sqrt_r))
-abline(h=0)
-
 library(emmeans)
 
-emm <- summary(emmeans(model_inv_sqrt_r, ~ Tr))
-emm$r <- 1 / (emm$emmean^2)
-emm$r_lower <- 1 / (emm$upper.CL^2)    # note: intervals flip
-emm$r_upper <- 1 / (emm$lower.CL^2)
-emm$r_ci <- emm$r_upper - emm$r
+fig1data_emm <- summary(emmeans(model_full, ~ Tr))
 
-r_lm_result <- emm
+
 
 sizeData$Tr <- ifelse(sizeData$temperature == "30C", 0.5, -0.5)
 
-model_full_size <- lmer(area_px ~ Tr * site + (1+Tr || site:leaf) + (1+Tr || site:leaf:clone), sizeData)
+lmer(mumax ~ Tr + (1|Site:Leaf) + (0 + Tr|Site:Leaf) +
+       (1|Site:Leaf:Clone) + (0 + Tr|Site:Leaf:Clone), summaryData)
 
-vars <- c(
-  clone30 = 4.283e+03,
-  leaf30 = 1.506e-04,
-  leaf25 = 4.345e+03,
-  resid = 1.217e+06)
-total_var <- sum(vars)
 
-var_df <- data.frame(
-  source = c(names(vars), "total"),
-  variance = c(vars, total_var),
-  percent = c(vars / total_var * 100, 100),
+
+model_full_size <- lmer(area_px ~ Tr + (1 | site) + (1 | site:leaf) + (1 | site:leaf:clone), sizeData)
+
+vars_size <- c(
+  clone = 8345,
+  leaf = 0,
+  site = 5225,
+  resid = 1208593)
+total_var_size <- sum(vars_size)
+
+var_df_size <- data.frame(
+  source = c(names(vars_size), "total"),
+  variance = c(vars_size, total_var_size),
+  percent = c(vars_size / total_var_size * 100, 100),
   row.names = NULL)
 
 
 
-
-
-sizeLeafData <- sizeData %>% group_by(temperature, leaf, clone) %>%
-  summarize(mean = mean(area_px), n = length(area_px), se = sd(area_px)/sqrt(length(area_px)))
-
-ggplot(sizeLeafData, aes(x = temperature, y = mean, group=clone, color = leaf)) +
-  geom_point(stat = 'identity', position = position_dodge(width = .2)) +
-  geom_line(position = position_dodge(width = .2)) +
-  geom_errorbar(stat = 'identity', position = position_dodge(width = .2),
-                aes(ymin = mean - se, ymax = mean + se)) +
-  theme_bw()
-
-
-# ------------ Un-used Models ----------------
-# growth rate
-
-#model0 <- lmer(r ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
-#
-#model1 <- lmer(log(r) ~ Treatment + (1|Site+Leaf+Clone), data = summaryData)
-#model2 <- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), data = summaryData)
-#
-#model2a <- lmer((1/r) ~ Treatment + (1|Site) + (1|Leaf) + (1|Clone), summaryData)
-#
-#model3 <- lm((1/r) ~ Treatment * Clone, summaryData)
-#model3a <- lmer((1/r) ~ Treatment + (1|Clone), summaryData)
-#model3b<- lmer((1/r) ~ Treatment + (1|Leaf/Clone), summaryData)
-#model3c<- lmer((1/r) ~ Treatment + (1|Site/Leaf/Clone), summaryData)
-#model3d<- lmer((1/r) ~ Treatment + (1|Site/Leaf), summaryData)
-#model3e<- lmer((1/r) ~ Treatment + (1|Site), summaryData)
-#
-#model4 <- lm(r ~ Treatment * Clone, summaryData)
-#model4a<- lmer(r ~ Treatment + (1|Clone), summaryData)
-#model4b<- lmer(r ~ Treatment + (1|Leaf/Clone), summaryData)
-#model4c<- lmer(r ~ Treatment + (1|Site/Leaf/Clone), summaryData)
-#model4d<- lmer(r ~ Treatment + (1|Site/Leaf), summaryData)
-#model4e<- lmer(r ~ Treatment + (1|Site), summaryData)
-#
-#m_base  <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1|Site:Leaf:Clone), data=summaryData)
-#
-#m_rxn   <- lmer(log(r) ~ Treatment + Site + (1|Site:Leaf) + (1 + Treatment|Site:Leaf:Clone), data=summaryData)
-#
-#model5 <- lmer(log(r) ~ Treatment + (1 | Site) + (1 | Site:Leaf) + 
-#                        (0 + Treatment | Site:Leaf:Clone), data = summaryData)
-#
-#
-#summaryData$Tr <- ifelse(summaryData$Treatment == "30C", 0.5, -0.5)
-## to remove correlations between random effects using '||', factors have to be replaced by
-## an explicit contrast-coded predictor
-#
-#summaryData$Treatment <- as.factor(summaryData$Treatment)
-#contrasts(summaryData$Treatment) <- c(-1/2, 1/2)
-#
-#
-#model6 <- lmer(log(r) ~ Tr + (1 + Tr | Site:Leaf:Clone), data = summaryData)
-## failed to converge, neg. eigenvalue(?) - probably b/c 0 variance in clone @ 25C
-#
-#                                    #*#
-#model7 <- lmer(log(r) ~ Tr + (0 + Tr | Site:Leaf:Clone), data = summaryData)
-## 
-#
-#
-#model8 <- lmer(r ~ Tr + (1|Site) + (1|Site:Leaf) +
-#              (1 + Tr | Site:Leaf:Clone),
-#              data = summaryData)
-#
-#model9a <- lmer(r ~ Tr + (1 + Tr | Site) + (1 + Tr | Site:Leaf) + (1 + Tr | Site:Leaf:Clone), data = summaryData)
-#
-#model9b <- lmer(r ~ Tr + (1 + Tr | Site:Leaf) + (1 + Tr | Site:Leaf:Clone), data = summaryData)
-#
-#model9e <- lmer(r ~ Treatment + (0 + Treatment | Site:Leaf:Clone), data = summaryData)
-#
-#model9f <- lmer(r ~ Treatment + (1 + Treatment | Site:Leaf) + (1 + Treatment | Site:Leaf:Clone), data = summaryData)
-#
-#model10 <- lmer(r ~ Treatment + Site + (1 + Treatment | Site:Leaf) + (1 + Treatment | Site:Leaf:Clone), summaryData)
-#
-#model11 <- lmer(r ~ Tr + Site + (1+Tr || Site/Leaf) + (1+Tr || Site/Leaf/Clone), summaryData)
-#
-#
-#model12 <- lmer(r ~ Tr + (1+Tr || Site:Leaf) + (1+Tr || Site:Leaf:Clone), summaryData)
-#
-#model13 <- lmer(r ~ Tr + Site + (1+Tr || Site:Leaf) + (0+Tr || Site:Leaf:Clone), summaryData)
-
-
-
-
-
-## Model Testing:
-
-t1a <- model9
-t1b <- model9b # Better fit (x2 = 0, p = 1)
-anova(model9, model9b)
-
-t2a <- t1b
-t2b <- model9a # Better fit (x2 = 2.38, p = 0.304)
-anova(t2a, t2b)
-
-t3a <- t2b
-t3b <-
-  
-  # still not normal w/ ln; gamma link=log?
-  
-  # size
-  model9 <- lmer(log(area_px) ~ temperature + (1|site+leaf+clone), data = sizeData)
-
-
-
-
-
-
-
-
 # ------------ Data Vis ----------------
-theme_alex<-readRDS('theme_alex.rds')
 
-theme_alex_raw <- readRDS("theme_alex.rds")
-
-# Rebuild it as a ggplot2 theme (validates under the current ggplot2)
-theme_alex <- do.call(ggplot2::theme, theme_alex_raw)
+library(paletteer)
 
 
-## growth rate - total variance: 7.768
+fig4data <- summaryData %>%
+  group_by(Treatment, Leaf, Clone) %>%
+  summarize(mean = mean(mumax),
+            ci = 1.96 * (sd(mumax)/sqrt(length(mumax))))
 
-# Temperature: F(1,95)=11.009, p=0.0013
-ggplot(r_lm_result, aes(x = Tr, y = r)) +
-  geom_bar(stat="identity") +
-  geom_errorbar(stat="identity", aes(ymin=r-r_lower, ymax=r+r_upper))
-
-
-
-graphdata1 <- summaryData %>% group_by(Treatment) %>% 
-  summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
-ggplot(graphdata1, aes(x = Treatment, y = mean)) +
-  geom_bar(stat='identity') +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se)) +
-  labs(y="intrinsic growth rate (r)")
-
-graphdata1a <- summaryData %>% group_by(Treatment, Leaf, Clone) %>%
-  summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
-ggplot(graphdata1a, aes(x = Treatment, y = mean, color = Leaf, group = Clone)) +
-  geom_point(stat='identity', position = position_dodge(width=0.15)) +
-  geom_line(stat='identity', position = position_dodge(width=0.15)) +
-  labs(x="Temperature", y="Growth rate") +
+ggplot(fig3data, aes(x = Leaf, y = mean, color = Treatment, group = Leaf, shape = Treatment)) +
+  geom_point(stat = "identity", position = position_dodge(width = 0.1), size = 3) +
+  geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                aes(ymin = mean - ci, ymax = mean + ci), width = 0.3) +
+  #geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+  geom_point(data = fig4data, aes(x = Leaf, y = mean, color = Treatment), alpha = 0.5,
+             position = position_jitter(width = 0.2)) +
+  scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+  geom_vline(xintercept = 3.5, linetype = "dashed") +
+  geom_text(data = data.frame(Leaf = c(0.9, 4), y = 0.39, label = c("Site 1", "Site 2")),
+            aes(x = Leaf, y = y, label = label), inherit.aes = FALSE) +
+  labs(x = "Leaf", y = "Maximum growth rate (μmax)") +
   theme_bw() +
-  theme(panel.grid = element_blank())
-
-
-# Site: 
-graphdata2 <- summaryData %>% group_by(Treatment, Site) %>% summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
-ggplot(graphdata2, aes(x = Site, y = mean, fill = Treatment)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
-  labs(y="Intrinsic growth rate (r)")
-
-
-# Leaf: 
-
-graphdata3 <- summaryData %>% group_by(Treatment, Leaf) %>% summarize(mean=mean(r), ci=1.96*(sd(r)/sqrt(length(r))))
-ggplot(graphdata3, aes(x = Leaf, y = mean, fill = Treatment)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-ci, ymax=mean+ci), position=position_dodge(width = 1), width=.8) +
-  geom_point(data = summaryData%>%group_by(Treatment,Leaf),
-             aes(x = Leaf, y = r, group = Treatment),
-             position = position_jitterdodge(dodge.width = 1, jitter.width = 0.6)) +
-  labs(y="intrinsic growth rate (r)") +
-  theme_minimal() +
   theme(
-    axis.line = element_line(linewidth = 0.5),
-    panel.border = element_rect(linewidth = 0.5),
-    panel.grid = element_blank()
-  )
-
-graphdata3 <- summaryData %>% group_by(Treatment, Leaf) %>% summarize(mean=mean(mumax), ci=1.96*(sd(mumax)/sqrt(length(mumax))))
-ggplot(graphdata3, aes(x = Leaf, y = mean, fill = Treatment)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-ci, ymax=mean+ci), position=position_dodge(width = 1), width=.8) +
-  geom_point(data = summaryData%>%group_by(Treatment,Leaf),
-             aes(x = Leaf, y = mumax, group = Treatment),
-             position = position_jitterdodge(dodge.width = 1, jitter.width = 0.6)) +
-  labs(y="intrinsic growth rate (r)") +
-  theme_minimal() +
-  theme(
-    axis.line = element_line(linewidth = 0.5),
-    panel.border = element_rect(linewidth = 0.5),
-    panel.grid = element_blank()
-  )
-
-# Clone: 
-graphdata4 <- summaryData %>% group_by(Treatment, Clone) %>% summarize(mean=mean(r), se=sd(r)/sqrt(length(r)))
-ggplot(graphdata4, aes(x = Clone, y = mean, fill = Treatment)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
-  labs(y="intrinsic growth rate (r)")
-
-graphdata4 <- summaryData %>% group_by(Treatment, Clone) %>% summarize(mean=mean(mumax), ci=1.96*(sd(mumax)/sqrt(length(mumax))))
-ggplot(graphdata4, aes(x = Clone, y = mean, fill = Treatment)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-ci, ymax=mean+ci), position=position_dodge(width = 1), width=.8) +
-  geom_point(data = summaryData%>%group_by(Treatment,Clone),
-             aes(x = Clone, y = mumax, group = Treatment),
-             position = position_jitterdodge(dodge.width = 1, jitter.width = 0.6)) +
-  labs(y="intrinsic growth rate (r)") +
-  theme_minimal() +
-  theme(
-    axis.line = element_line(linewidth = 0.5),
-    panel.border = element_rect(linewidth = 0.5),
+    plot.background = element_blank(),
     panel.grid = element_blank()
   )
 
 
-## size
+ggplot(fig4data, aes(x = Clone, y = mean, color = Treatment, shape = Treatment)) +
+  geom_point(stat = "identity", position = position_dodge(width = 0.1), size = 3) +
+  geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                aes(ymin = mean - ci, ymax = mean + ci), width = 0.3) +
+  #geom_point(data = summaryData, aes(x = Clone, y = mumax, color = Treatment), alpha = 0.5,
+  #           position = position_jitter(width = 0.2)) +
+  scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+  labs(x = "Clone", y = "Maximum growth rate (μmax)") +
+  theme_bw() +
+  theme(
+    plot.background = element_blank(),
+    panel.grid = element_blank()
+  )
+                
+# ------------ Extra Figs ----------------
 
-# Temperature:
-graphdata5 <- sizeData %>% group_by(temperature) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
-ggplot(graphdata5, aes(x = temperature, y = mean, fill = temperature)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
-  labs(y="body size (px^2)")
+fig1data <- summaryData %>%
+  group_by(Treatment) %>%
+  summarize(mean = mean(mumax),
+            ci = 1.96 * (sd(mumax)/sqrt(length(mumax))))
 
-# Site:
-graphdata6 <- sizeData %>% group_by(temperature, site) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
-ggplot(graphdata6, aes(x = site, y = mean
-                       #, fill = temperature
-)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
-  labs(y="body size (px^2)")
+ggplot(fig1data, aes(x = Treatment, y = mean, fill = Treatment)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(stat = "identity", width = 0.8,
+                aes(ymin = mean - ci, ymax = mean + ci)) +
+  labs(x = "Temperature", y = "Maximum growth rate (μmax)") +
+  scale_fill_manual(values = c("seagreen2", "slateblue2")) +
+  theme_bw() +
+  theme(
+    plot.background = element_blank(),
+    panel.grid = element_blank()
+  )
 
-# Leaf: 0.03% of variance
-graphdata7 <- sizeData %>% group_by(temperature, leaf) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
-ggplot(graphdata7, aes(x = leaf, y = mean, fill = temperature)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
-  labs(y="body size (px^2)")
+fig2data <- summaryData %>%
+  group_by(Treatment, Site) %>%
+  summarize(mean = mean(mumax),
+            ci = 1.96 * (sd(mumax)/sqrt(length(mumax))))
 
-# Clone: 0.72% of variance
-graphdata8 <- sizeData %>% group_by(temperature, clone) %>% summarize(mean=mean(area_px), se=sd(area_px)/sqrt(length(area_px)))
-ggplot(graphdata8, aes(x = clone, y = mean, fill = temperature)) +
-  geom_bar(stat='identity', position=position_dodge(width = 1)) +
-  geom_errorbar(aes(ymin=mean-se, ymax=mean+se), position=position_dodge(width = 1), width=.8) +
-  labs(y="body size (px^2)")
+ggplot(fig2data, aes(x = Treatment, y = mean, color = Site, group = Site)) +
+  geom_point(stat = "identity", position = position_dodge(width = 0.1), size = 2.5) +
+  geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                aes(ymin = mean - ci, ymax = mean + ci), width = 0.3) +
+  geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+  scale_color_manual(values = c("seagreen2", "slateblue2")) +
+  theme_bw() +
+  theme(
+    plot.background = element_blank(),
+    panel.grid = element_blank()
+  )
+
+fig3data <- summaryData %>%
+  group_by(Treatment, Leaf) %>%
+  summarize(mean = mean(mumax),
+            ci = 1.96 * (sd(mumax)/sqrt(length(mumax))))
+
+ggplot(fig3data, aes(x = Treatment, y = mean, color = Leaf, group = Leaf)) +
+  geom_point(stat = "identity", position = position_dodge(width = 0.1), size = 2.5) +
+  geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                aes(ymin = mean - ci, ymax = mean + ci), width = 0.3) +
+  geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+  scale_color_paletteer_d("LaCroixColoR::PeachPear") +
+  theme_bw() +
+  theme(
+    plot.background = element_blank(),
+    panel.grid = element_blank()
+  )
+
+                
+                
 
 
-sampleSummary <- sizeData %>%
-  group_by(clone) %>% summarize(n25 = sum(temperature=="25C"),
-                                n30 = sum(temperature=="30C"))
+
