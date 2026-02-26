@@ -1,0 +1,344 @@
+---
+title: "mendelson_thesis"
+output: html_document
+---
+
+# Data import
+
+```{r}
+
+library(tidyverse)
+
+exp1_growthcurves <- read.csv("../data/exp_1_growthcurves.csv")
+exp1_bodysize     <- read.csv("../data/exp_1_size.csv")
+
+exp2_growthcurves <- read.csv("../data/exp_2_growthcurves.csv")
+#exp_2_bodysize     <- read.csv("")  # doesn't exist yet...
+
+```
+
+# Experiment 1
+
+*Diversity of response in temperature*
+
+### Data structuring
+
+```{r}
+
+exp1_growthcurves <- exp1_growthcurves %>%
+  mutate(Day = Day - 3,
+         Count1 = Count + 1,
+         across(c(Site, Leaf, Clone, Treatment, ID), as.factor),
+         across(c(Day, Count), as.integer))
+
+clone_key <- c(
+  "1" = 1,  "2" = 2,  "17" = 3,  "18" = 4,  "19" = 5,
+  "72" = 6, "73" = 7, "74" = 8, "39" = 9,  "40" = 10,
+  "42" = 11,"75" = 12,"26" = 13,"25" = 14,"35" = 15,
+  "36" = 16,"37" = 17
+  )
+
+exp1_bodysize <- exp1_bodysize %>%
+  separate(base, into = c("unk", "culture", "image", "object"), 
+           sep = "_", convert = TRUE) %>%
+  separate(culture, into = c("siteLeaf", "clone", "replicate"), 
+           sep = "-", convert = TRUE) %>%
+  mutate(site = as.integer(case_when(str_sub(siteLeaf, 1, 1) == "c" ~ 1,
+                                     str_sub(siteLeaf, 1, 1) == "p" ~ 2)),
+         leaf = str_sub(siteLeaf, start = 2),
+         leaf = as.integer(case_when(leaf == "23" ~ 1,
+                                     leaf == "7"  ~ 2,
+                                     leaf == "36" & site == "1" ~ 3,
+                                     leaf == "36" & site == "2" ~ 4,
+                                     leaf == "24" ~ 5,
+                                     leaf == "3"  ~ 6)),
+         clone = as.integer(unname(clone_key[as.character(clone)])),
+         temperature = as.factor(case_when(replicate %in% 
+                                             c(1, 2, 3) ~ "25C",
+                                           replicate %in% 
+                                             c(4, 5, 6) ~ "30C")),
+         Tr = ifelse(temperature == "30C", 0.5, -0.5),
+        across(c(temperature, site, leaf, clone), factor)) %>%
+  filter_out(clone=="6")
+
+```
+
+### Growth Models
+
+```{r}
+
+library(growthrates)
+
+exp1_growth_models <- all_splines(
+                  Count1 ~ Day | Treatment + Site + Leaf + Clone + ID,
+                  data = exp1_growthcurves,
+                  spar = 0.5
+                  )
+
+# helper function to visualize model fits
+plot_exp1_models <- function(models) {
+  coefs <- as.data.frame(coef(models))
+  model_ids <- c(1:length(coefs$y0))
+  
+  columns <- floor(sqrt(length(model_ids)))
+  rows <- columns + 1
+  par(mfrow = c(columns, rows), mar = c(1, 1, 1, 1))
+  
+  for (i in seq_along(model_ids)) {
+    plot(models[[i]])
+    
+    this_r <- round(coefs$mumax[i], 6)
+    this_model <- rownames(coefs)[i]
+    
+    mtext(this_model, side = 3, adj = 0.1, line = -1, cex = 0.5)
+    mtext(paste("r:", this_r), side = 3, adj = 0.1, line = -2, cex = 0.5)
+  }
+}
+
+plot_exp1_models(exp1_growth_models)
+
+exp1_growth_summary <- results(exp1_growth_models) %>%
+  mutate(across(c(Treatment, Site, Leaf, Clone), factor),
+         Tr = ifelse(Treatment == "30C", 0.5, -0.5)) # treatment contrasts
+
+```
+
+### Linear Mixed Model Analysis
+
+```{r}
+
+library(car)
+library(moments)
+library(lme4)
+library(lmerTest)
+
+
+### Maximum growth rate:
+
+# raw data for variance components
+exp1_lmm_r <- lmer(mumax ~ 
+                       Tr + 
+                       (1 | Site:Leaf) + 
+                       (0+Tr | Site:Leaf) + 
+                       (1 | Site:Leaf:Clone) + 
+                       (0+Tr | Site:Leaf:Clone), 
+                       data = exp1_growth_summary
+                     )
+
+summary(exp1_lmm_r)
+
+hist(exp1_growth_summary$mumax)
+hist(log(exp1_growth_summary$mumax))
+
+# log-transformed normal data for fixed effect
+exp1_lmm_log_r <- lmer(log(mumax) ~ 
+                         Tr + 
+                         (1 | Site:Leaf) + 
+                         (0+Tr | Site:Leaf) + 
+                         (1 | Site:Leaf:Clone) + 
+                         (0+Tr | Site:Leaf:Clone), 
+                       data = exp1_growth_summary
+                     )
+
+plot(exp1_lmm_log_r)
+qqp(resid(exp1_lmm_log_r), "norm")
+skewness(log(exp1_growth_summary$mumax))
+kurtosis(log(exp1_growth_summary$mumax))
+
+anova(exp1_lmm_log_r, type = 3, ddf = "Satterthwaite")
+
+
+### Body size:
+
+# raw data for variance components
+exp1_lmm_size <- lmer(area_px ~ 
+                       Tr + 
+                       (1 | site) + 
+                       (1 | site:leaf) + 
+                       (1 | site:leaf:clone), 
+                    data = exp1_bodysize)
+
+summary(exp1_lmm_size)
+
+hist(exp_1_bodysize$area_px)
+hist(sqrt(exp_1_bodysize$area_px))
+
+# square root transformed data for fixed effect
+exp1_lmm_sqrt_size <- lmer(sqrt(area_px) ~ 
+                       Tr + 
+                       (1 | site) + 
+                       (1 | site:leaf) + 
+                       (1 | site:leaf:clone), 
+                    data = exp1_bodysize)
+
+plot(exp1_lmm_sqrt_size)
+qqp(resid(exp1_lmm_sqrt_size), "norm")
+qqp(resid(exp1_lmm_size), "norm")
+skewness(sqrt(exp_1_bodysize$area_px))
+kurtosis(sqrt(exp_1_bodysize$area_px))
+
+anova(exp1_lmm_sqrt_size, type = 3, ddf = "Satterthwaite")
+
+```
+
+# Experiment 2
+
+*Indirect effects of evolutionary history of temperature on competition in contemporary temperature environments*
+
+### Data Structuring
+
+```{r}
+
+exp2_growthcurves <- exp2_growthcurves %>%
+  mutate(hour = as.integer(day * 24),
+         across(c(evolvedTemp, currentTemp, competition, repNum), factor))
+
+
+exp2_rotifer_growth <- exp2_growthcurves %>%
+  filter(species == "rotifer")
+exp2_protist_growth <- exp2_growthcurves %>%
+  filter(species == "protist")
+
+```
+
+### Growth Models
+
+```{r}
+
+library(growthrates)
+
+# user-specified model
+logistic_alpha_function <- function(time, parms) {
+  y0    <- parms[["y0"]]
+  r     <- parms[["r"]]
+  alpha <- parms[["alpha"]]
+  
+  y <- (r * y0) / (alpha * y0 + (r - alpha * y0) * exp(-r * time))
+  
+  cbind(time = time, y = y)
+}
+
+grow_logistic_alpha <- growthmodel(
+  logistic_alpha_function,
+  pnames = c("y0", "r", "alpha")
+)
+
+exp2_growth_models_rotifer <- all_growthmodels(
+  count ~ hour | evolvedTemp + currentTemp + competition + repNum, 
+    data  = exp2_rotifer_growth,
+    p     = c(y0 = 5, r = 0.1, alpha = 0.0005), # initial
+    upper = c(y0 = 7, r = 8, alpha = 1),
+    lower = c(y0 = 3, r = 0.003, alpha = 0.0001),
+    FUN   = grow_logistic_alpha
+)
+
+exp2_growth_models_protist <- all_growthmodels(
+  count ~ hour | evolvedTemp + currentTemp + competition + repNum, 
+    data  = exp2_protist_growth,
+    p     = c(y0 = 10, r = 0.1, alpha = 0.0003), # initial
+    upper = c(y0 = 15, r = 5, alpha = 0.02),
+    lower = c(y0 = 5, r = 0.001, alpha = 0.000005),
+    FUN   = grow_logistic_alpha
+)
+
+
+exp2_growth_summary_rotifer <- results(exp2_growth_models_rotifer) %>%
+  rownames_to_column(var = "id") %>%
+  separate(col = "id", 
+           into = c("evolvedTemp", "currentTemp", "competition", "replicate"), 
+           sep = ":") %>%
+  mutate(across(c(evolvedTemp, currentTemp, competition, replicate), factor),
+         r_hour = r, r_day = r * 24,
+         alpha_hour = alpha, alpha_day = alpha * 24,
+         K = r_day / alpha_day)
+
+exp2_growth_summary_protist <- results(exp2_growth_models_protist) %>%
+  rownames_to_column(var = "id") %>%
+  separate(col = "id", 
+           into = c("evolvedTemp", "currentTemp", "competition", "replicate"), 
+           sep = ":") %>%
+  mutate(across(c(evolvedTemp, currentTemp, competition, replicate), factor),
+         compFactor = case_when(
+           evolvedTemp == "25" & competition == TRUE ~ "25-evol-rotif",
+           evolvedTemp == "30" & competition == TRUE ~ "30-evol-rotif",
+           competition == FALSE ~ "no-comp"),
+         r_hour = r, r_day = r * 24,
+         alpha_hour = alpha, alpha_day = alpha * 24,
+         K = r_day / alpha_day)
+
+```
+
+### Linear Model Analysis
+
+```{r}
+
+library(car)
+library(moments)
+library(emmeans)
+
+
+### Rotifers: Intrinsic growth rate
+
+hist(exp2_growth_summary_rotifer$r_day)
+hist(log(exp2_growth_summary_rotifer$r_day))
+
+exp2_lm_rotifer_log_r <- lm(log(r_day) ~ evolvedTemp * currentTemp * competition, 
+                            data = exp2_growth_summary_rotifer)
+
+plot(exp2_lm_rotifer_log_r)
+qqp(exp2_lm_rotifer_log_r, "norm")
+skewness(log(exp2_growth_summary_rotifer$r_day))
+kurtosis(log(exp2_growth_summary_rotifer$r_day))
+
+Anova(exp2_lm_rotifer_log_r, type = "III")
+
+
+### Rotifers: Crowding coefficient
+
+hist(exp2_growth_summary_rotifer$alpha_day)
+qqp(exp2_growth_summary_rotifer$alpha_day, "norm")
+
+exp2_lm_rotifer_alpha <- lm(alpha_day ~ evolvedTemp * currentTemp * competition, 
+                            data = exp2_growth_summary_rotifer)
+
+plot(exp2_lm_rotifer_alpha)
+qqp(exp2_lm_rotifer_alpha, "norm")
+skewness(exp2_growth_summary_rotifer$alpha_day)
+kurtosis(exp2_growth_summary_rotifer$alpha_day)
+
+Anova(exp2_lm_rotifer_alpha, type = "III")
+
+
+### Protists: Intrinsic growth rate
+
+hist(exp2_growth_summary_protist$r_day)
+hist(log(exp2_growth_summary_protist$r_day))
+
+exp2_lm_protist_log_r <- lm(log(r_day) ~ currentTemp * compFactor, 
+                            data = exp2_growth_summary_protist)
+
+plot(exp2_lm_protist_log_r)
+qqp(exp2_lm_protist_log_r, "norm")
+skewness(log(exp2_growth_summary_protist$r_day))
+kurtosis(log(exp2_growth_summary_protist$r_day))
+
+Anova(exp2_lm_protist_log_r, type = "III")
+
+
+### Protists: Crowding coefficient
+
+hist(exp2_growth_summary_protist$alpha_day)
+hist(log(exp2_growth_summary_protist$alpha_day))
+
+exp2_lm_protist_log_alpha <- lm(log(alpha_day) ~ currentTemp * compFactor, 
+                            data = exp2_growth_summary_protist)
+
+plot(exp2_lm_protist_log_alpha)
+qqp(exp2_lm_protist_log_alpha, "norm")
+skewness(log(exp2_growth_summary_protist$alpha_day))
+kurtosis(log(exp2_growth_summary_protist$alpha_day))
+
+Anova(exp2_lm_protist_log_alpha, type = "III")
+
+
+```
