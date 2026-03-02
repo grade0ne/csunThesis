@@ -160,8 +160,8 @@ exp1_lmm_size <- lmer(area_px ~
 
 summary(exp1_lmm_size)
 
-hist(exp_1_bodysize$area_px)
-hist(sqrt(exp_1_bodysize$area_px))
+hist(exp1_bodysize$area_px)
+hist(sqrt(exp1_bodysize$area_px))
 
 # square root transformed data for fixed effect
 exp1_lmm_sqrt_size <- lmer(sqrt(area_px) ~ 
@@ -174,8 +174,8 @@ exp1_lmm_sqrt_size <- lmer(sqrt(area_px) ~
 plot(exp1_lmm_sqrt_size)
 qqp(resid(exp1_lmm_sqrt_size), "norm")
 qqp(resid(exp1_lmm_size), "norm")
-skewness(sqrt(exp_1_bodysize$area_px))
-kurtosis(sqrt(exp_1_bodysize$area_px))
+skewness(sqrt(exp1_bodysize$area_px))
+kurtosis(sqrt(exp1_bodysize$area_px))
 
 anova(exp1_lmm_sqrt_size, type = 3, ddf = "Satterthwaite")
 
@@ -292,6 +292,15 @@ kurtosis(log(exp2_growth_summary_rotifer$r_day))
 
 Anova(exp2_lm_rotifer_log_r, type = "III")
 
+emm_rotifer_r_EvxCo <- emmeans(exp2_lm_rotifer_log_r, ~ evolvedTemp | competition)
+pairs(emm_rotifer_r_EvxCo, adjust = "tukey")
+
+emm_rotifer_r_CuxCo <- emmeans(exp2_lm_rotifer_log_r, ~ currentTemp | competition)
+pairs(emm_rotifer_r_CuxCo, adjust = "tukey")
+
+emm_rotifer_r_CoxCu <- emmeans(exp2_lm_rotifer_log_r, ~ competition | currentTemp)
+pairs(emm_rotifer_r_CoxCu, adjust = "tukey")
+
 
 ### Rotifers: Crowding coefficient
 
@@ -307,6 +316,9 @@ skewness(exp2_growth_summary_rotifer$alpha_day)
 kurtosis(exp2_growth_summary_rotifer$alpha_day)
 
 Anova(exp2_lm_rotifer_alpha, type = "III")
+
+emm_rotifer_alpha_CuxCo <- emmeans(exp2_lm_rotifer_alpha, ~ currentTemp | competition)
+pairs(emm_rotifer_alpha_CuxCo, adjust = "tueky")
 
 
 ### Protists: Intrinsic growth rate
@@ -324,6 +336,11 @@ kurtosis(log(exp2_growth_summary_protist$r_day))
 
 Anova(exp2_lm_protist_log_r, type = "III")
 
+emm_protist_r_CuxCo <- emmeans(exp2_lm_protist_log_r, ~ currentTemp | compFactor)
+pairs(emm_protist_r_CuxCo, adjust = "tukey")
+
+emm_protist_r_CoxCu <- emmeans(exp2_lm_protist_log_r, ~ compFactor | currentTemp)
+pairs(emm_protist_r_CoxCu, adjust = "tukey")
 
 ### Protists: Crowding coefficient
 
@@ -339,6 +356,12 @@ skewness(log(exp2_growth_summary_protist$alpha_day))
 kurtosis(log(exp2_growth_summary_protist$alpha_day))
 
 Anova(exp2_lm_protist_log_alpha, type = "III")
+
+emm_protist_alpha_CuxCo <- emmeans(exp2_lm_protist_log_alpha, ~ currentTemp | compFactor)
+pairs(emm_protist_alpha_CuxCo, adjust = "tukey")
+
+emm_protist_alpha_CoxCu <- emmeans(exp2_lm_protist_log_alpha, ~ compFactor | currentTemp)
+pairs(emm_protist_alpha_CoxCu, adjust = "tukey")
 
 
 ```
