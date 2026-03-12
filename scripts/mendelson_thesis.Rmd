@@ -181,20 +181,21 @@ anova(exp1_lmm_sqrt_size, type = 3, ddf = "Satterthwaite")
 
 ```
 
-### Figures
+### Fig1
+
+#### Code
 
 ```{r}
 
-library(paletteer)
-
 fig1a_data <- exp1_growth_summary %>%
   group_by(Treatment, Site, Leaf, Clone) %>%
-  summarize(mean_mu = mean(mumax), ci_mu = 1.96 * sd(mumax)/sqrt(length(mumax)))
+  summarize(mean_mu = mean(mumax), se_mu = sd(mumax)/sqrt(length(mumax)))
 
 fig1a <- ggplot(fig1a_data, aes(x = Treatment, y = mean_mu, color = Leaf, group = Clone)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean_mu - ci_mu, ymax = mean_mu + ci_mu), width = 0.15, linewidth = 0.25) +
+                          aes(ymin = mean_mu - se_mu, ymax = mean_mu + se_mu), 
+                          width = 0.15, linewidth = 0.25) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~Leaf) +
             labs(x = "Temperature", y = "Maximum growth rate") +
@@ -205,24 +206,16 @@ fig1a <- ggplot(fig1a_data, aes(x = Treatment, y = mean_mu, color = Leaf, group 
               strip.text = element_blank()
               )
 
-ggsave(
-  filename = "fig1a.pdf",
-  plot = fig1a,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
-
 
 fig1b_data <- exp1_bodysize %>%
   group_by(temperature, site, leaf, clone) %>%
-  summarize(mean_size = mean(area_px), ci_size = 1.96 * sd(area_px)/sqrt(length(area_px)))
+  summarize(mean_size = mean(area_px), se_size = sd(area_px)/sqrt(length(area_px)))
 
 fig1b <- ggplot(fig1b_data, aes(x = temperature, y = mean_size, color = leaf, group = clone)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean_size - ci_size, ymax = mean_size + ci_size), width = 0.15, linewidth = 0.25) +
+                          aes(ymin = mean_size - se_size, ymax = mean_size + se_size), 
+                          width = 0.15, linewidth = 0.25) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~leaf) +
             labs(x = "Temperature", y = expression("Body size")) +
@@ -233,14 +226,23 @@ fig1b <- ggplot(fig1b_data, aes(x = temperature, y = mean_size, color = leaf, gr
               strip.text = element_blank()
               )
 
-ggsave(
-  filename = "fig1b.pdf",
-  plot = fig1b,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
+```
+
+#### Export
+
+```{r fig1 export}
+
+fig1_names <- c("fig1a", "fig1b")
+fig1 <- mget(fig1_names)
+
+iwalk(fig1, ~ ggsave(
+  filename = paste0(.y, ".pdf"),
+  plot     = .x,
+  width    = 6,
+  height   = 4,
+  units    = "in",
+  path     = "../output/manuscriptFigures"
+))
 
 ```
 
@@ -313,7 +315,9 @@ exp2_growth_summary_rotifer <- results(exp2_growth_models_rotifer) %>%
   mutate(across(c(evolvedTemp, currentTemp, competition, replicate), factor),
          r_hour = r, r_day = r * 24,
          alpha_hour = alpha, alpha_day = alpha * 24,
-         K = r_day / alpha_day)
+         K = r_day / alpha_day,
+         competition = case_when(competition == TRUE ~ "Present",
+                                 competition == FALSE ~ "Absent"))
 
 exp2_growth_summary_protist <- results(exp2_growth_models_protist) %>%
   rownames_to_column(var = "id") %>%
@@ -374,6 +378,9 @@ emm_rotifer_r_EvxCuxCo <- emmeans(exp2_lm_rotifer_log_r,
 
 pairs(emm_rotifer_r_EvxCuxCo, adjust = "tukey")
 
+emm_rotifer_r_FULL <- emmeans(emm_rotifer_r_EvxCuxCo, ~ evolvedTemp * currentTemp * competition)
+pairs(emm_rotifer_r_FULL, adjust = "tukey")
+# emmeans SE is 0.0772 
 
 ### Rotifers: Crowding coefficient
 
@@ -396,6 +403,9 @@ pairs(emm_rotifer_alpha_CuxCo, adjust = "tueky")
 
 emm_rotifer_alpha_CuxCoxEv <- emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp | competition * currentTemp)
 pairs(emm_rotifer_alpha_CuxCoxEv, adjust = "tukey")
+
+emm_rotifer_alpha_FULL <- emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp * currentTemp * competition)
+pairs(emm_rotifer_alpha_FULL, adjust = "tukey")
 
 
 ### Protists: Intrinsic growth rate
@@ -465,46 +475,18 @@ g_protists <- exp2_growth_summary_protist %>%
 ```
 
 
-### Figures
+### Fig 2
 
-```{r}
+#### Code
 
-fig2a_data <- exp2_growth_summary_rotifer %>%
-  group_by(evolvedTemp, currentTemp, competition) %>%
-  summarize(mean = mean(r_day), ci = 1.96 * sd(r_day)/sqrt(length(r_day)))
+```{r fig2 code}
 
-fig2a <- ggplot(fig2a_data, aes(x = competition, y = mean, color = evolvedTemp, group = evolvedTemp)) +
+fig2a_data <- as.data.frame(emmeans(exp2_lm_rotifer_log_r, ~ evolvedTemp * currentTemp * competition))
+
+fig2a <- ggplot(fig2a_data, aes(x = competition, y = emmean, color = evolvedTemp, group = evolvedTemp)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean - ci, ymax = mean + ci), width = 0.15) +
-            geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
-            facet_wrap(~currentTemp) +
-            labs(x = "Competition", y = "Intrinsic growth rate") +
-            theme_minimal() +
-            scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
-            theme(
-              panel.grid = element_blank(),
-              panel.border = element_rect(linewidth = 0.5),
-              legend.position = "none"
-              )
-ggsave(
-  filename = "fig2a.pdf",
-  plot = fig2a,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
-
-
-fig2b_data <- exp2_growth_summary_rotifer %>%
-  group_by(evolvedTemp, currentTemp, competition) %>%
-  summarize(mean = mean(log(r_day)), ci = 1.96 * sd(log(r_day))/sqrt(length(r_day)))
-
-fig2b <- ggplot(fig2b_data, aes(x = competition, y = mean, color = evolvedTemp, group = evolvedTemp)) +
-            geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
-            geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean - ci, ymax = mean + ci), width = 0.15) +
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~currentTemp) +
             labs(x = "Competition", y = "ln(Intrinsic growth rate)") +
@@ -516,25 +498,13 @@ fig2b <- ggplot(fig2b_data, aes(x = competition, y = mean, color = evolvedTemp, 
               legend.position = "none"
               )
 
-ggsave(
-  filename = "fig2b.pdf",
-  plot = fig2b,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
 
+fig2b_data <- as.data.frame(emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp * currentTemp * competition))
 
-
-fig2c_data <- exp2_growth_summary_rotifer %>%
-  group_by(evolvedTemp, currentTemp, competition) %>%
-  summarize(mean = mean(alpha_day), ci = 1.96 * sd(alpha_day)/sqrt(length(alpha_day)))
-
-fig2c <- ggplot(fig2c_data, aes(x = competition, y = mean, color = evolvedTemp, group = evolvedTemp)) +
+fig2b <- ggplot(fig2b_data, aes(x = competition, y = emmean, color = evolvedTemp, group = evolvedTemp)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean - ci, ymax = mean + ci), width = 0.15) +
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~currentTemp) +
             labs(x = "Competition", y = "Intraspecific competition coefficient (α)") +
@@ -546,26 +516,14 @@ fig2c <- ggplot(fig2c_data, aes(x = competition, y = mean, color = evolvedTemp, 
               legend.position = "none"
               )
 
-ggsave(
-  filename = "fig2c.pdf",
-  plot = fig2c,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
 
+fig2c_data <- as.data.frame(emmeans(exp2_lm_protist_log_r, ~ currentTemp * compFactor))
 
-fig2d_data <- exp2_growth_summary_protist %>%
-  group_by(compFactor, currentTemp) %>%
-  summarize(mean = mean(log(r_day)), ci = 1.96 * sd(log(r_day))/sqrt(length(r_day)))
-
-fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = mean, color = compFactor, group = compFactor)) +
+fig2c <- ggplot(fig2c_data, aes(x = currentTemp, y = emmean, color = compFactor, group = compFactor)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean - ci, ymax = mean + ci), width = 0.15) +
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
-            facet_wrap(~compFactor) +
             labs(x = "Temperature", y = "ln(Intrinsic growth rate, r)") +
             theme_minimal() +
             scale_color_manual(values = c("#1BB6AF", "#E9A17C", "lightgreen")) +
@@ -575,26 +533,14 @@ fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = mean, color = compFactor, g
               legend.position = "none"
               )
 
-ggsave(
-  filename = "fig2d.pdf",
-  plot = fig2d,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
 
+fig2d_data <- as.data.frame(emmeans(exp2_lm_protist_log_alpha, ~ currentTemp * compFactor))
 
-fig2e_data <- exp2_growth_summary_protist %>%
-  group_by(compFactor, currentTemp) %>%
-  summarize(mean = mean(log(alpha_day)), ci = 1.96 * sd(log(alpha_day))/sqrt(length(alpha_day)))
-
-fig2e <- ggplot(fig2e_data, aes(x = currentTemp, y = mean, color = compFactor, group = compFactor)) +
+fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = emmean, color = compFactor, group = compFactor)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
-                          aes(ymin = mean - ci, ymax = mean + ci), width = 0.15) +
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
-            facet_wrap(~compFactor) +
             labs(x = "Temperature", y = "ln(Intraspecific competition coefficient, α)") +
             theme_minimal() +
             scale_color_manual(values = c("#1BB6AF", "#E9A17C", "lightgreen")) +
@@ -604,16 +550,24 @@ fig2e <- ggplot(fig2e_data, aes(x = currentTemp, y = mean, color = compFactor, g
               legend.position = "none"
               )
 
-ggsave(
-  filename = "fig2e.pdf",
-  plot = fig2e,
-  width = 6,
-  height = 4,
-  units = "in",
-  path = "C:/Users/timet/Documents/projectCSUN/csunThesisRepo/output/manuscriptFigures"
-)
-
 ```
 
+#### Export
+
+```{r fig2 export}
+
+fig2_names <- c("fig2a", "fig2b", "fig2c", "fig2d")
+fig2 <- mget(fig2_names)
+
+iwalk(fig2, ~ ggsave(
+  filename = paste0(.y, ".pdf"),
+  plot     = .x,
+  width    = 6,
+  height   = 4,
+  units    = "in",
+  path     = "../output/manuscriptFigures"
+))
+
+```
 
 
