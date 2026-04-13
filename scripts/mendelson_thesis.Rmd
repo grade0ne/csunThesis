@@ -378,8 +378,17 @@ emm_rotifer_r_EvxCuxCo <- emmeans(exp2_lm_rotifer_log_r,
 
 pairs(emm_rotifer_r_EvxCuxCo, adjust = "tukey")
 
-emm_rotifer_r_FULL <- emmeans(emm_rotifer_r_EvxCuxCo, ~ evolvedTemp * currentTemp * competition)
+emm_rotifer_r_FULL <- emmeans(exp2_lm_rotifer_log_r, ~ evolvedTemp * currentTemp * competition)
 pairs(emm_rotifer_r_FULL, adjust = "tukey")
+
+library(multcomp)
+
+rotifer_r_cld <- multcomp::cld(
+  emm_rotifer_r_FULL,
+  adjust = "tukey",
+  Letters = letters
+)
+
 # emmeans SE is 0.0772 
 
 ### Rotifers: Crowding coefficient
@@ -498,6 +507,55 @@ fig2a <- ggplot(fig2a_data, aes(x = competition, y = emmean, color = evolvedTemp
               legend.position = "none"
               )
 
+fig2at <- ggplot(fig2a_data, aes(x = competition, y = emmean, color = evolvedTemp, group = evolvedTemp)) +
+            geom_rect(aes(fill = currentTemp),
+              xmin = -Inf, xmax = Inf,
+              ymin = -Inf, ymax = Inf,
+              inherit.aes = FALSE,
+              alpha = 0.05) +
+            scale_fill_manual(values = c("#1BB6AF", "#E9A17C")) +
+            geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
+            geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
+            geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+            facet_wrap(~currentTemp) +
+            labs(x = "Competition", y = "ln(Intrinsic growth rate)") +
+            coord_cartesian(ylim = c(-1.2, -0.2)) +
+            theme_minimal() +
+            scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+            theme(
+              panel.grid = element_blank(),
+              panel.border = element_rect(linewidth = 0.5),
+              legend.position = "none",
+              panel.background = element_rect(fill = "transparent", color = NA)
+              )
+
+
+fig2a_combo_data <- as.data.frame(emmeans(exp2_lm_rotifer_log_r, ~ currentTemp * competition))
+
+fig2a_combo <- ggplot(fig2a_combo_data, aes(x = competition, y = emmean, group = currentTemp)) +
+            geom_rect(aes(fill = currentTemp),
+                        xmin = -Inf, xmax = Inf,
+                        ymin = -Inf, ymax = Inf,
+                        inherit.aes = FALSE,
+                        alpha = 0.1) +
+            scale_fill_manual(values = c("#1BB6AF", "#E9A17C")) +
+            geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
+            geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
+            geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+            facet_wrap(~currentTemp) +
+            labs(x = "Competition", y = "ln(Intrinsic growth rate)") +
+            coord_cartesian(ylim = c(-1.2, -0.2)) +
+            theme_minimal() +
+            scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+            theme(
+              panel.grid = element_blank(),
+              panel.border = element_rect(linewidth = 0.5),
+              legend.position = "none",
+              panel.background = element_rect(fill = "transparent", color = NA)
+              )
+
 
 fig2b_data <- as.data.frame(emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp * currentTemp * competition))
 
@@ -556,7 +614,7 @@ fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = emmean, color = compFactor,
 
 ```{r fig2 export}
 
-fig2_names <- c("fig2a", "fig2b", "fig2c", "fig2d")
+fig2_names <- c("fig2a_combo")
 fig2 <- mget(fig2_names)
 
 iwalk(fig2, ~ ggsave(
