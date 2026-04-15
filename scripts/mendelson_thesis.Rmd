@@ -1,6 +1,8 @@
 ---
 title: "mendelson_thesis"
-output: html_document
+output: 
+  html_document: 
+    toc: true
 ---
 
 # Data import
@@ -252,8 +254,7 @@ iwalk(fig1, ~ ggsave(
 
 ### Data Structuring
 
-```{r}
-
+```{r exp2data}
 exp2_growthcurves <- exp2_growthcurves %>%
   mutate(hour = as.integer(day * 24),
          across(c(evolvedTemp, currentTemp, competition, repNum), factor))
@@ -268,7 +269,7 @@ exp2_protist_growth <- exp2_growthcurves %>%
 
 ### Growth Models
 
-```{r}
+```{r exp2logistic}
 
 library(growthrates)
 
@@ -337,7 +338,7 @@ exp2_growth_summary_protist <- results(exp2_growth_models_protist) %>%
 
 ### Linear Model Analysis
 
-```{r}
+```{r exp2lm}
 
 library(car)
 library(moments)
@@ -416,6 +417,20 @@ pairs(emm_rotifer_alpha_CuxCoxEv, adjust = "tukey")
 emm_rotifer_alpha_FULL <- emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp * currentTemp * competition)
 pairs(emm_rotifer_alpha_FULL, adjust = "tukey")
 
+### Rotifers: Equilibrium
+
+hist(exp2_growth_summary_rotifer$K)
+qqp(exp2_growth_summary_rotifer$K, 'norm')
+
+exp2_lm_rotifer_eq <- lm(K ~ evolvedTemp * currentTemp * competition,
+                         data = exp2_growth_summary_rotifer)
+
+plot(exp2_lm_rotifer_eq)
+qqp(exp2_lm_rotifer_eq, "norm")
+skewness(exp2_growth_summary_rotifer$alpha_day)
+kurtosis(exp2_growth_summary_rotifer$alpha_day)
+
+Anova(exp2_lm_rotifer_eq, type = "III")
 
 ### Protists: Intrinsic growth rate
 
@@ -460,11 +475,29 @@ emm_protist_alpha_CoxCu <- emmeans(exp2_lm_protist_log_alpha, ~ compFactor | cur
 pairs(emm_protist_alpha_CoxCu, adjust = "tukey")
 
 
+### Protists: Equilibrium
+
+hist(exp2_growth_summary_protist$K)
+qqp(exp2_growth_summary_protist$K, 'norm')
+
+exp2_lm_protist_eq <- lm(K ~ currentTemp * compFactor,
+                         data = exp2_growth_summary_protist)
+
+plot(exp2_lm_protist_eq)
+qqp(exp2_lm_protist_eq, "norm")
+skewness(exp2_growth_summary_protist$alpha_day)
+kurtosis(exp2_growth_summary_protist$alpha_day)
+
+Anova(exp2_lm_protist_eq, type = "III")
+
+emm_protist_eq_CuxCo <- emmeans(exp2_lm_protist_eq, ~ currentTemp | compFactor)
+emm_protist_eq_CoxCu <- emmeans(exp2_lm_protist_eq, ~ compFactor | currentTemp)
+
 ```
 
-### Generation time
+### Generations
 
-```{r}
+```{r gen}
 
 t_evol <- 135 # days spent in constant temperature
 
@@ -482,7 +515,6 @@ g_protists <- exp2_growth_summary_protist %>%
 
 
 ```
-
 
 ### Fig 2
 
@@ -627,5 +659,3 @@ iwalk(fig2, ~ ggsave(
 ))
 
 ```
-
-
