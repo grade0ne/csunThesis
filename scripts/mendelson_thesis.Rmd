@@ -105,6 +105,199 @@ exp1_growth_summary <- results(exp1_growth_models) %>%
 
 ```
 
+### Growth Parameters
+
+```{r}
+
+max_obs_df <- exp1_growthcurves %>%
+  group_by(Treatment, Site, Leaf, Clone, ID) %>%
+  summarise(
+    max_observed_abundance = max(Count1, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+library(dplyr)
+library(purrr)
+library(tidyr)
+
+# ---------- helper: time of mu_max using OBSERVED sampling days ----------
+get_mu_and_t_observed <- function(fit_obj) {
+  ss <- fit_obj@fit
+  x_obs <- fit_obj@obs[, 1] |> unique() |> sort()
+
+  d1 <- predict(ss, x = x_obs, deriv = 1)
+  i <- which.max(d1$y)
+
+  tibble(
+    mu_max = d1$y[i],
+    t_mumax = x_obs[i]
+  )
+}
+
+
+# ---------- build table of fits ----------
+fits_df <- tibble(
+  fit_name = names(exp1_growth_models@fits),
+  fit = exp1_growth_models@fits
+) %>%
+  separate(
+    fit_name,
+    into = c("Treatment", "Site", "Leaf", "Clone", "ID"),
+    sep = ":",
+    remove = FALSE
+  ) %>%
+  mutate(
+    Leaf = as.character(Leaf),
+    Clone = as.character(Clone),
+    ID = as.character(ID)
+  )
+
+# ---------- extract mu_max and time of mu_max ----------
+# Use the observed-day version first
+t_mumax_df <- fits_df %>%
+  mutate(metrics = map(fit, get_mu_and_t_observed)) %>%
+  unnest(metrics)
+
+# ---------- maximum observed abundance from raw data ----------
+max_obs_df <- exp1_growthcurves %>%
+  mutate(
+    Leaf = as.character(Leaf),
+    Clone = as.character(Clone),
+    ID = as.character(ID)
+  ) %>%
+  group_by(Treatment, Site, Leaf, Clone, ID) %>%
+  summarise(
+    max_observed_abundance = max(Count1, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# ---------- combine ----------
+growth_summary <- t_mumax_df %>%
+  select(Treatment, Site, Leaf, Clone, ID, mu_max, t_mumax) %>%
+  left_join(
+    max_obs_df,
+    by = c("Treatment", "Site", "Leaf", "Clone", "ID")
+  )
+
+growth_summary
+
+tmumax_graph <- growth_summary %>%
+  group_by(Treatment, Site, Leaf, Clone) %>%
+  summarise(mean= mean(t_mumax),
+            se = sd(t_mumax)/sqrt(n()),
+            mumax = mean(mu_max))
+
+ggplot(tmumax_graph, aes(x = Treatment, y = mean, fill = Clone)) +
+  geom_bar(stat = 'identity', position = position_dodge(width = 0.5), width = 0.5) +
+  geom_errorbar(stat = 'identity', position = position_dodge(width = 0.5), width = 0.4, aes(ymin = mean - se, ymax = mean + se)) +
+  facet_wrap(~Leaf) +
+  theme_minimal()
+
+
+
+fig1c <- ggplot(tmumax_graph, aes(x = Treatment, y = mean, color = Leaf, group = Clone)) +
+            geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
+            geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                          aes(ymin = mean - se, ymax = mean + se), 
+                          width = 0.15, linewidth = 0.25) +
+            geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+            facet_wrap(~Leaf) +
+            labs(x = "Temperature", y = "tmumax") +
+            theme_minimal() +
+            theme(
+              panel.grid = element_blank(),
+              panel.border = element_rect(linewidth = 0.5),
+              strip.text = element_blank()
+              )
+
+fig1d <- ggplot(tmumax_graph, aes(x = mean, y = mumax, color = Treatment, 
+                                  group = Clone)) +
+            geom_point(stat = "identity") +
+            geom_line(stat = "identity") +
+            labs(x = "tmumax", y = "mumax") +
+            facet_wrap(~Leaf) +
+            theme_minimal() +
+            theme(
+              panel.grid = element_blank(),
+              panel.border = element_rect(linewidth = 0.5),
+              strip.text = element_blank()
+              )
+
+
+get_mu_and_t_observed <- function(fit_obj) {
+  ss <- fit_obj@fit
+  x_obs <- fit_obj@obs[[1]] |> unique() |> sort()
+  
+  d1 <- predict(ss, x = x_obs, deriv = 1)
+  i <- which.max(d1$y)
+  
+  tibble(
+    mu_max = d1$y[i],
+    t_mumax = x_obs[i]
+  )
+}
+
+t_mumax_df <- fits_df %>%
+  mutate(metrics = purrr::map(fit, get_mu_and_t_observed)) %>%
+  tidyr::unnest(metrics)
+
+
+timing_df <- t_mumax_df %>%
+  mutate(
+    early_peak = ifelse(t_mumax <= 3, 1, 0)
+  )
+
+table(timing_df$Treatment, timing_df$early_peak)
+
+library(lme4)
+
+m_early_peak <- glmer(
+  early_peak ~ Treatment +
+    (1 | Site) +
+    (1 | Site:Leaf) +
+    (1 | Site:Leaf:Clone),
+  data = timing_df,
+  family = binomial
+)
+
+summary(m_early_peak)
+
+overdisp_fun <- function(model) {
+  rdf <- df.residual(model)
+  rp <- residuals(model, type = "pearson")
+  chisq <- sum(rp^2)
+  ratio <- chisq / rdf
+  p <- pchisq(chisq, df = rdf, lower.tail = FALSE)
+  
+  c(chisq = chisq, ratio = ratio, rdf = rdf, p = p)
+}
+
+overdisp_fun(m_early_peak)
+
+# MAX ABUNDNANCE TEST
+
+library(lmerTest)
+
+m_max_abund <- lmer(
+  max_observed_abundance ~ Treatment +
+    (1 | Site:Leaf) +
+    (1 | Site:Leaf:Clone),
+  data = growth_summary
+)
+
+m_max_abund_red <- lm(max_observed_abundance ~ Treatment, data = growth_summary)
+
+
+
+# EXPLORING MUMAX AND TMUMAX INTERACTIONS
+
+tm_int_model <- lmer(mu_max ~ t_mumax * Treatment + (1 | Site:Leaf:Clone), data = growth_summary)
+
+```
+
+
+
 ### Linear Mixed Model Analysis
 
 ```{r}
@@ -502,7 +695,7 @@ emm_protist_eq_CoxCu <- emmeans(exp2_lm_protist_eq, ~ compFactor | currentTemp)
 t_evol <- 135 # days spent in constant temperature
 
 g_rotifers <- exp2_growth_summary_rotifer %>% 
-  filter(competition == FALSE, evolvedTemp == currentTemp) %>%
+  filter(competition == "Absent", evolvedTemp == currentTemp) %>%
   group_by(evolvedTemp, currentTemp) %>%
   summarize(g = log(2)/mean(r_day),
             t_evol = t_evol,
@@ -659,3 +852,223 @@ iwalk(fig2, ~ ggsave(
 ))
 
 ```
+
+
+### Random testing
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+
+clone_means <- growth_summary %>%
+  group_by(Site, Leaf, Clone, Treatment) %>%
+  summarise(
+    mu_max = mean(mu_max, na.rm = TRUE),
+    t_mumax = mean(t_mumax, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+delta_df <- clone_means %>%
+  pivot_wider(
+    names_from = Treatment,
+    values_from = c(mu_max, t_mumax)
+  ) %>%
+  mutate(
+    delta_mu = mu_max_30C - mu_max_25C,
+    delta_t  = t_mumax_30C - t_mumax_25C
+  )
+
+delta_df
+  )
+
+cor.test(delta_df$delta_t, delta_df$delta_mu)
+
+lm_delta <- lm(delta_mu ~ delta_t, data = delta_df)
+summary(lm_delta)
+
+library(ggplot2)
+
+ggplot(delta_df, aes(x = delta_t, y = delta_mu)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(
+    x = expression(Delta ~ t[mu[max]]),
+    y = expression(Delta ~ mu[max])
+  )
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(patchwork)
+
+# --------------------------------------------------
+# 1. plotting data
+# --------------------------------------------------
+library(dplyr)
+
+plot_df <- growth_summary %>%
+  mutate(
+    leaf_id = paste(Site, Leaf, sep = ":"),
+    clone_id = paste(Site, Leaf, Clone, sep = ":")
+  ) %>%
+  group_by(leaf_id) %>%
+  mutate(
+    clone_shape = factor(dense_rank(Clone))
+  ) %>%
+  ungroup()
+
+clone_means <- plot_df %>%
+  group_by(Site, Leaf, Clone, leaf_id, clone_id, clone_shape, Treatment) %>%
+  summarise(
+    mu_max = mean(mu_max, na.rm = TRUE),
+    t_mumax = mean(t_mumax, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# --------------------------------------------------
+# 3. clone-level deltas for bottom panel
+# --------------------------------------------------
+delta_df <- clone_means %>%
+  select(Site, Leaf, Clone, leaf_id, clone_id, Treatment, mu_max, t_mumax) %>%
+  pivot_wider(
+    names_from = Treatment,
+    values_from = c(mu_max, t_mumax)
+  ) %>%
+  mutate(
+    delta_mu = mu_max_30C - mu_max_25C,
+    delta_t  = t_mumax_30C - t_mumax_25C
+  )
+
+# --------------------------------------------------
+# 4. top panel
+#    - raw replicate points
+#    - clone means connected across treatments
+#    - clone-colored within each facet
+# --------------------------------------------------
+p1 <- ggplot() +
+  geom_point(
+    data = plot_df,
+    aes(x = t_mumax, y = mu_max,
+        color = Treatment,
+        shape = clone_shape),
+    size = 1.6,
+    alpha = 0.4,
+    position = position_jitter(width = 0.12, height = 0)
+  ) +
+  geom_line(
+    data = clone_means,
+    aes(x = t_mumax, y = mu_max,
+        group = clone_id),
+    linewidth = 0.6,
+    alpha = 0.8,
+    color = "gray40"
+  ) +
+  geom_point(
+    data = clone_means,
+    aes(x = t_mumax, y = mu_max,
+        color = Treatment,
+        shape = clone_shape),
+    size = 3
+  ) +
+  facet_wrap(~ leaf_id, ncol = 3) +
+  labs(
+    x = expression(t[mu[max]]),
+    y = expression(mu[max]),
+    color = "Temperature",
+    shape = "Clone",
+    title = "Clone reaction norms in timing-growth space"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    strip.background = element_rect(fill = "white"),
+    legend.position = "right"
+  )
+# --------------------------------------------------
+# 5. bottom panel
+#    - clone-level delta plot
+#    - color by leaf
+# --------------------------------------------------
+p2 <- ggplot(delta_df, aes(x = delta_t, y = delta_mu, color = leaf_id)) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.4) +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.4) +
+  geom_point(size = 2.8, alpha = 0.95) +
+  geom_smooth(
+    aes(group = 1),
+    method = "lm",
+    se = FALSE,
+    linewidth = 0.7,
+    color = "black"
+  ) +
+  labs(
+    x = expression(Delta * t[mu[max]] ~ "(30" * degree * "C - 25" * degree * "C)"),
+    y = expression(Delta * mu[max] ~ "(30" * degree * "C - 25" * degree * "C)"),
+    color = "Leaf",
+    title = expression("Clone-level change in timing vs. change in " * mu[max])
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right"
+  )
+
+# --------------------------------------------------
+# 6. combine
+# --------------------------------------------------
+combined_plot <- p1 / p2 +
+  plot_annotation(tag_levels = "A")
+
+combined_plot
+
+
+ggplot(growth_summary, aes(x = t_mumax, y = mu_max, color = Treatment)) +
+  geom_point(alpha = 0.6) +
+  
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    linewidth = 1
+  ) +
+  
+  labs(
+    x = expression(t[mu[max]]),
+    y = expression(mu[max]),
+    color = "Temperature",
+    title = "Relationship between timing and growth rate across temperatures"
+  ) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+ggplot(growth_summary, aes(x = t_mumax, y = mu_max)) +
+  geom_point(aes(color = Treatment), alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  theme_bw()
+
+
+ggplot(clone_means, aes(x = t_mumax, y = mu_max, color = Treatment)) +
+  
+  # clone reaction norms (thin lines)
+  geom_line(aes(group = clone_id), alpha = 0.4) +
+  
+  # clone mean points
+  geom_point(size = 2.5) +
+  
+  # regression lines with confidence bands
+  geom_smooth(
+    method = "lm",
+    se = TRUE,
+    linewidth = 1,
+    alpha = 0.2
+  ) +
+  
+  labs(
+    x = expression(t[mu[max]]),
+    y = expression(mu[max]),
+    color = "Temperature"
+  ) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
