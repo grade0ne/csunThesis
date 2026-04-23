@@ -99,86 +99,99 @@ plot_exp1_models <- function(models) {
 
 plot_exp1_models(exp1_growth_models)
 
-exp1_growth_summary <- results(exp1_growth_models) %>%
-  mutate(across(c(Treatment, Site, Leaf, Clone), factor),
-         Tr = ifelse(Treatment == "30C", 0.5, -0.5)) # treatment contrasts
+# extracting tmumax from the underlying models:
+n_fits <- 102L
 
+mumax_tbl <- tibble::tibble(
+  id = as.character(seq_len(n_fits)),
+  mumax = vapply(seq_len(n_fits), function(i) {
+    unname(exp1_growth_models[[i]]@par["mumax"])
+  }, numeric(1)),
+  t_mumax = vapply(seq_len(n_fits), function(i) {
+    exp1_growth_models[[i]]@xy[1]
+  }, numeric(1))
+)
+
+
+exp1_growth_summary <- results(exp1_growth_models) %>%
+  mutate(
+    across(c(Treatment, Site, Leaf, Clone), factor),
+    Tr = ifelse(Treatment == "30C", 0.5, -0.5),
+    t_mumax = vapply(seq_len(n()), function(i) {
+      exp1_growth_models[[i]]@xy[1]
+    }, numeric(1)),
+    growth_type = if_else(t_mumax < 0.01, "early_max", "interior_max")
+  )
+
+
+
+plot_df <- exp1_growth_summary %>%
+  mutate(
+    growth_type = if_else(t_mumax < 0.01, "early_max", "interior_max")
+  ) %>%
+  count(Treatment, Leaf, Clone, growth_type) %>%
+  group_by(Treatment, Leaf, Clone) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup() %>%
+  group_by(Treatment, Leaf, growth_type) %>%
+  summarise(
+    mean_prop = mean(prop),
+    se = sd(prop) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(plot_df, aes(x = Treatment, y = mean_prop, fill = growth_type)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_prop - se, ymax = mean_prop + se),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ Leaf) +
+  labs(
+    x = "Treatment",
+    y = "Mean proportion across clones",
+    fill = "Growth type"
+  ) +
+  theme_bw()
+
+
+library(lme4)
+
+exp1_growth_summary <- exp1_growth_summary %>%
+  mutate(
+    growth_type = if_else(t_mumax < 0.01, 1, 0)  # binary
+  )
+
+model <- glmer(
+  growth_type ~ Treatment + (1 | Leaf/Clone),
+  data = exp1_growth_summary,
+  family = binomial
+)
+
+summary(model)
+
+tab <- table(exp1_growth_summary$Treatment,
+             exp1_growth_summary$growth_type)
+
+fisher.test(tab)
 ```
 
 ### Growth Parameters
 
 ```{r}
 
-max_obs_df <- exp1_growthcurves %>%
-  group_by(Treatment, Site, Leaf, Clone, ID) %>%
-  summarise(
-    max_observed_abundance = max(Count1, na.rm = TRUE),
-    .groups = "drop"
-  )
+n_fits <- 102L
 
-
-library(dplyr)
-library(purrr)
-library(tidyr)
-
-# ---------- helper: time of mu_max using OBSERVED sampling days ----------
-get_mu_and_t_observed <- function(fit_obj) {
-  ss <- fit_obj@fit
-  x_obs <- fit_obj@obs[, 1] |> unique() |> sort()
-
-  d1 <- predict(ss, x = x_obs, deriv = 1)
-  i <- which.max(d1$y)
-
-  tibble(
-    mu_max = d1$y[i],
-    t_mumax = x_obs[i]
-  )
-}
-
-
-# ---------- build table of fits ----------
-fits_df <- tibble(
-  fit_name = names(exp1_growth_models@fits),
-  fit = exp1_growth_models@fits
-) %>%
-  separate(
-    fit_name,
-    into = c("Treatment", "Site", "Leaf", "Clone", "ID"),
-    sep = ":",
-    remove = FALSE
-  ) %>%
-  mutate(
-    Leaf = as.character(Leaf),
-    Clone = as.character(Clone),
-    ID = as.character(ID)
-  )
-
-# ---------- extract mu_max and time of mu_max ----------
-# Use the observed-day version first
-t_mumax_df <- fits_df %>%
-  mutate(metrics = map(fit, get_mu_and_t_observed)) %>%
-  unnest(metrics)
-
-# ---------- maximum observed abundance from raw data ----------
-max_obs_df <- exp1_growthcurves %>%
-  mutate(
-    Leaf = as.character(Leaf),
-    Clone = as.character(Clone),
-    ID = as.character(ID)
-  ) %>%
-  group_by(Treatment, Site, Leaf, Clone, ID) %>%
-  summarise(
-    max_observed_abundance = max(Count1, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# ---------- combine ----------
-growth_summary <- t_mumax_df %>%
-  select(Treatment, Site, Leaf, Clone, ID, mu_max, t_mumax) %>%
-  left_join(
-    max_obs_df,
-    by = c("Treatment", "Site", "Leaf", "Clone", "ID")
-  )
+mumax_tbl <- tibble::tibble(
+  id = as.character(seq_len(n_fits)),
+  mumax = vapply(seq_len(n_fits), function(i) {
+    unname(exp1_growth_models[[i]]@par["mumax"])
+  }, numeric(1)),
+  t_mumax = vapply(seq_len(n_fits), function(i) {
+    exp1_growth_models[[i]]@xy[1]
+  }, numeric(1))
+)
 
 growth_summary
 
@@ -295,8 +308,6 @@ m_max_abund_red <- lm(max_observed_abundance ~ Treatment, data = growth_summary)
 tm_int_model <- lmer(mu_max ~ t_mumax * Treatment + (1 | Site:Leaf:Clone), data = growth_summary)
 
 ```
-
-
 
 ### Linear Mixed Model Analysis
 
@@ -853,7 +864,6 @@ iwalk(fig2, ~ ggsave(
 
 ```
 
-
 ### Random testing
 
 ```{r}
@@ -1071,4 +1081,3 @@ ggplot(clone_means, aes(x = t_mumax, y = mu_max, color = Treatment)) +
   theme_bw() +
   theme(panel.grid = element_blank())
 ```
-
