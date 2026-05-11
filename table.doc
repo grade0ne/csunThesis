@@ -1,0 +1,38 @@
+
+==========================================================================
+                                                   Dependent variable:    
+                                               ---------------------------
+                                                       log(r_day)         
+--------------------------------------------------------------------------
+evolvedTemp30                                            -0.046           
+                                                         (0.077)          
+                                                                          
+currentTemp30                                           0.485***          
+                                                         (0.077)          
+                                                                          
+competitionPresent                                       -0.073           
+                                                         (0.077)          
+                                                                          
+evolvedTemp30:currentTemp30                              -0.064           
+                                                         (0.109)          
+                                                                          
+evolvedTemp30:competitionPresent                        -0.250**          
+                                                         (0.109)          
+                                                                          
+currentTemp30:competitionPresent                        -0.370***         
+                                                         (0.109)          
+                                                                          
+evolvedTemp30:currentTemp30:competitionPresent            0.210           
+                                                         (0.154)          
+                                                                          
+Constant                                                -0.727***         
+                                                         (0.055)          
+                                                                          
+--------------------------------------------------------------------------
+Observations                                               80             
+R2                                                        0.708           
+Adjusted R2                                               0.680           
+Residual Std. Error                                  0.173 (df = 72)      
+F Statistic                                      24.953*** (df = 7; 72)   
+==========================================================================
+Note:                                          *p<0.1; **p<0.05; ***p<0.01

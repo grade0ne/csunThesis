@@ -60,7 +60,7 @@ exp1_bodysize <- exp1_bodysize %>%
                                            replicate %in% 
                                              c(4, 5, 6) ~ "30C")),
          Tr = ifelse(temperature == "30C", 0.5, -0.5),
-        across(c(temperature, site, leaf, clone), factor)) %>%
+        across(c(temperature, site, leaf, clone, replicate), factor)) %>%
   filter_out(clone=="6")
 
 ```
@@ -213,6 +213,32 @@ skewness(sqrt(exp1_bodysize$area_px))
 kurtosis(sqrt(exp1_bodysize$area_px))
 
 anova(exp1_lmm_sqrt_size, type = 3, ddf = "Satterthwaite")
+
+# clone as fixed effect only
+
+exp1_lm_size_clone <- lm(sqrt(area_px) ~ clone, data = exp1_bodysize)
+Anova(exp1_lm_size_clone, type = "III")
+
+exp1_lmm_size_clone <- lmer(sqrt(area_px) ~ Tr + (1|clone) + (1|leaf), data = exp1_bodysize)
+exp1_lmm_size_noclone <- lmer(sqrt(area_px) ~ Tr + (1|leaf), data = exp1_bodysize)
+Anova(exp1_lmm_size_clone, type = "III")
+summary(exp1_lmm_size_clone)
+
+anova(exp1_lmm_size_clone, exp1_lmm_size_noclone)
+
+
+
+exp1_bodysize$rep_temp <- with(exp1_bodysize,
+  ifelse(replicate %in% c("1","2","3"),
+         paste0("25C_", replicate),
+         paste0("30C_", replicate))
+)
+
+exp1_lmm_size_replicate <- lmer(sqrt(area_px) ~ Tr + (1|clone) + (1|clone:rep_temp) + (1|leaf),
+     data = exp1_bodysize)
+
+Anova(exp1_lmm_size_replicate, type = "III")
+summary(exp1_lmm_size_replicate)
 
 ### Max growth rate timing:
 library(ordinal)
@@ -456,7 +482,7 @@ kurtosis(exp2_growth_summary_rotifer$alpha_day)
 Anova(exp2_lm_rotifer_alpha, type = "III")
 
 emm_rotifer_alpha_CuxCo <- emmeans(exp2_lm_rotifer_alpha, ~ currentTemp | competition)
-pairs(emm_rotifer_alpha_CuxCo, adjust = "tueky")
+pairs(emm_rotifer_alpha_CuxCo, adjust = "tukey")
 
 
 emm_rotifer_alpha_CuxCoxEv <- emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp | competition * currentTemp)
@@ -540,6 +566,59 @@ Anova(exp2_lm_protist_eq, type = "III")
 
 emm_protist_eq_CuxCo <- emmeans(exp2_lm_protist_eq, ~ currentTemp | compFactor)
 emm_protist_eq_CoxCu <- emmeans(exp2_lm_protist_eq, ~ compFactor | currentTemp)
+
+```
+
+### Table Exports
+
+```{r tables}
+
+table2.1 <- Anova(exp2_lm_rotifer_log_r, type = "III")
+
+stargazer(
+table2.1,
+type = "html",
+out = "table2.1.html",
+summary = FALSE,
+rownames = TRUE,
+title = "Table 2.1"
+)
+
+
+table2.2 <- as.data.frame(pairs(emm_rotifer_r_EvxCuxCo, adjust = "tukey"))
+
+stargazer(
+table2.2,
+type = "html",
+out = "table2.2.html",
+summary = FALSE,
+rownames = TRUE,
+title = "Table 2.2"
+)
+
+
+table2.3 <- Anova(exp2_lm_rotifer_alpha, type = "III")
+
+stargazer(
+table2.3,
+type = "html",
+out = "table2.3.html",
+summary = FALSE,
+rownames = TRUE,
+title = "Table 2.3"
+)
+
+
+table2.4 <- as.data.frame(pairs(emm_rotifer_alpha_CuxCo, adjust = "tukey"))
+
+stargazer(
+table2.4,
+type = "html",
+out = "table2.4.html",
+summary = FALSE,
+rownames = TRUE,
+title = "Table 2.4"
+)
 
 ```
 
