@@ -339,6 +339,32 @@ exp2_rotifer_growth <- exp2_growthcurves %>%
 exp2_protist_growth <- exp2_growthcurves %>%
   filter(species == "protist")
 
+protist_nocomp <- exp2_growth_summary_protist %>%
+  filter(competition == FALSE) %>%
+  group_by(currentTemp, repNum) %>%
+  summarize(r_nocomp = mean(r_day), .groups = "drop")
+protist_comp <- exp2_growth_summary_protist %>%
+  filter(competition == TRUE) %>%
+  group_by(evolvedTemp, currentTemp, repNum) %>%
+  summarize(r_comp = mean(r_day), .groups = "drop")
+protist_delta <- protist_comp %>%
+  left_join(protist_nocomp, by = c("currentTemp", "repNum")) %>%
+  mutate(delta_r_protist = r_comp - r_nocomp)
+
+rotifer_comp <- exp2_growth_summary_rotifer %>%
+  filter(competition == "Present") %>%
+  group_by(evolvedTemp, currentTemp, repNum) %>%
+  summarize(
+    r = mean(r_day),
+    .groups = "drop"
+  )
+
+combo_data <- rotifer_comp %>%
+  left_join(protist_delta %>% select(evolvedTemp, currentTemp, repNum, delta_r_protist),
+            by = c("evolvedTemp", "currentTemp", "repNum")) %>%
+  mutate(evolvedTemp_effect = if_else(as.character(evolvedTemp) == "30", 0.5, -0.5),
+         currentTemp_effect = if_else(as.character(currentTemp) == "30", 0.5, -0.5))
+  
 ```
 
 ### Growth Models
@@ -567,7 +593,15 @@ Anova(exp2_lm_protist_eq, type = "III")
 emm_protist_eq_CuxCo <- emmeans(exp2_lm_protist_eq, ~ currentTemp | compFactor)
 emm_protist_eq_CoxCu <- emmeans(exp2_lm_protist_eq, ~ compFactor | currentTemp)
 
+
+### Mechanism: protist delta and rotifer r
+
+exp2_lmm_mech <- lmer(delta_r_protist ~ r * currentTemp_effect + evolvedTemp_effect + (1|repNum), data = combo_data, REML = FALSE)
+
+
 ```
+
+
 
 ### Table Exports
 
