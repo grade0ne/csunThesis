@@ -154,6 +154,7 @@ library(lmerTest)
 # raw data for variance components
 exp1_lmm_r <- lmer(mumax ~ 
                        Tr + 
+                       (1 | Site) +
                        (1 | Site:Leaf) + 
                        (0+Tr | Site:Leaf) + 
                        (1 | Site:Leaf:Clone) + 
@@ -181,7 +182,7 @@ qqp(resid(exp1_lmm_log_r), "norm")
 skewness(log(exp1_growth_summary$mumax))
 kurtosis(log(exp1_growth_summary$mumax))
 
-Anova(exp1_lmm_log_r_2, type = "III", test.statistic = "F")
+
 
 exp1_lmm_log_r_2 <- lme4::lmer(log(mumax) ~ 
                          Tr +
@@ -190,7 +191,7 @@ exp1_lmm_log_r_2 <- lme4::lmer(log(mumax) ~
                        data = exp1_growth_summary
                      )
 
-
+Anova(exp1_lmm_log_r_2, type = "III", test.statistic = "F")
 
 ### Body size:
 
