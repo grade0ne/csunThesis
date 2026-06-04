@@ -15,7 +15,7 @@ exp1_growthcurves <- read.csv("../data/exp_1_growthcurves.csv")
 exp1_bodysize     <- read.csv("../data/exp_1_size.csv")
 
 exp2_growthcurves <- read.csv("../data/exp_2_growthcurves.csv")
-#exp_2_bodysize     <- read.csv("")  # doesn't exist yet...
+exp2_bodysize    <- read.csv("../data/exp_2_size.csv")
 
 ```
 
@@ -60,7 +60,8 @@ exp1_bodysize <- exp1_bodysize %>%
                                            replicate %in% 
                                              c(4, 5, 6) ~ "30C")),
          Tr = ifelse(temperature == "30C", 0.5, -0.5),
-        across(c(temperature, site, leaf, clone, replicate), factor)) %>%
+        across(c(temperature, site, leaf, clone, replicate), factor),
+        area_um = area_px * (200 / 139)^2) %>%
   filter_out(clone=="6")
 
 ```
@@ -166,7 +167,7 @@ hist(exp1_growth_summary$mumax)
 hist(log(exp1_growth_summary$mumax))
 
 # log-transformed normal data for fixed effect
-exp1_lmm_log_r <- lmer(log(mumax) ~ 
+exp1_lmm_log_r <- lme4::lmer(log(mumax) ~ 
                          Tr + 
                          (1 | Site:Leaf) + 
                          (0+Tr | Site:Leaf) + 
@@ -180,7 +181,15 @@ qqp(resid(exp1_lmm_log_r), "norm")
 skewness(log(exp1_growth_summary$mumax))
 kurtosis(log(exp1_growth_summary$mumax))
 
-anova(exp1_lmm_log_r, type = 3, ddf = "Satterthwaite")
+Anova(exp1_lmm_log_r_2, type = "III", test.statistic = "F")
+
+exp1_lmm_log_r_2 <- lme4::lmer(log(mumax) ~ 
+                         Tr +
+                         (1 | Site:Leaf:Clone) + 
+                         (0+Tr | Site:Leaf:Clone), 
+                       data = exp1_growth_summary
+                     )
+
 
 
 ### Body size:
@@ -195,11 +204,11 @@ exp1_lmm_size <- lmer(area_px ~
 
 summary(exp1_lmm_size)
 
-hist(exp1_bodysize$area_px)
-hist(sqrt(exp1_bodysize$area_px))
+hist(exp1_bodysize$area_um)
+hist(sqrt(exp1_bodysize$area_um))
 
 # square root transformed data for fixed effect
-exp1_lmm_sqrt_size <- lmer(sqrt(area_px) ~ 
+exp1_lmm_sqrt_size <- lmer(sqrt(area_um) ~ 
                        Tr + 
                        (1 | site) + 
                        (1 | site:leaf) + 
@@ -209,50 +218,10 @@ exp1_lmm_sqrt_size <- lmer(sqrt(area_px) ~
 plot(exp1_lmm_sqrt_size)
 qqp(resid(exp1_lmm_sqrt_size), "norm")
 qqp(resid(exp1_lmm_size), "norm")
-skewness(sqrt(exp1_bodysize$area_px))
-kurtosis(sqrt(exp1_bodysize$area_px))
+skewness(sqrt(exp1_bodysize$area_um))
+kurtosis(sqrt(exp1_bodysize$area_um))
 
-anova(exp1_lmm_sqrt_size, type = 3, ddf = "Satterthwaite")
-
-# clone as fixed effect only
-
-exp1_lm_size_clone <- lm(sqrt(area_px) ~ clone, data = exp1_bodysize)
-Anova(exp1_lm_size_clone, type = "III")
-
-exp1_lmm_size_clone <- lmer(sqrt(area_px) ~ Tr + (1|clone) + (1|leaf), data = exp1_bodysize)
-exp1_lmm_size_noclone <- lmer(sqrt(area_px) ~ Tr + (1|leaf), data = exp1_bodysize)
-Anova(exp1_lmm_size_clone, type = "III")
-summary(exp1_lmm_size_clone)
-
-anova(exp1_lmm_size_clone, exp1_lmm_size_noclone)
-
-
-
-exp1_bodysize$rep_temp <- with(exp1_bodysize,
-  ifelse(replicate %in% c("1","2","3"),
-         paste0("25C_", replicate),
-         paste0("30C_", replicate))
-)
-
-exp1_lmm_size_replicate <- lmer(sqrt(area_px) ~ Tr + (1|clone) + (1|clone:rep_temp) + (1|leaf),
-     data = exp1_bodysize)
-
-Anova(exp1_lmm_size_replicate, type = "III")
-summary(exp1_lmm_size_replicate)
-
-### Max growth rate timing:
-library(ordinal)
-
-exp1_omm_timing <- clmm(tpeak_cat ~ Treatment + (1 + Treatment | Clone),
-                        data = exp1_growth_summary, link = "logit")
-
-
-exp1_om_test <- clm(tpeak_cat ~ Treatment, data = exp1_growth_summary)
-
-nominal_test(exp1_om_test)
-# proportional odds assumption not violated
-VarCorr(exp1_omm_timing)
-# All clones respond to warming by peaking earlier, but some respond more strongly than others.
+Anova(exp1_lmm_sqrt_size, type = "III")
 
 ```
 
@@ -265,16 +234,17 @@ VarCorr(exp1_omm_timing)
 
 fig1a_data <- exp1_growth_summary %>%
   group_by(Treatment, Site, Leaf, Clone) %>%
+  mutate(Treatment= recode_factor(Treatment, "25C" = "25°C", "30C" = "30°C")) %>%
   summarize(mean_mu = mean(mumax), se_mu = sd(mumax)/sqrt(length(mumax)))
 
 fig1a <- ggplot(fig1a_data, aes(x = Treatment, y = mean_mu, color = Leaf, group = Clone)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
                           aes(ymin = mean_mu - se_mu, ymax = mean_mu + se_mu), 
-                          width = 0.15, linewidth = 0.25) +
+                          width = 0.2, linewidth = 0.25) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~Leaf) +
-            labs(x = "Temperature", y = "Maximum growth rate") +
+            labs(x = "Temperature", y = expression("Maximum growth rate, "~italic("μ")[max]~"d "^-1)) +
             theme_minimal() +
             theme(
               panel.grid = element_blank(),
@@ -285,16 +255,17 @@ fig1a <- ggplot(fig1a_data, aes(x = Treatment, y = mean_mu, color = Leaf, group 
 
 fig1b_data <- exp1_bodysize %>%
   group_by(temperature, site, leaf, clone) %>%
-  summarize(mean_size = mean(area_px), se_size = sd(area_px)/sqrt(length(area_px)))
+  mutate(temperature = recode_factor(temperature , "25C" = "25°C", "30C" = "30°C")) %>%
+  summarize(mean_size = mean(area_um), se_size = sd(area_um)/sqrt(length(area_um)))
 
 fig1b <- ggplot(fig1b_data, aes(x = temperature, y = mean_size, color = leaf, group = clone)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
                           aes(ymin = mean_size - se_size, ymax = mean_size + se_size), 
-                          width = 0.15, linewidth = 0.25) +
+                          width = 0.2, linewidth = 0.25) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~leaf) +
-            labs(x = "Temperature", y = expression("Body size")) +
+            labs(x = "Temperature", y = expression("Body size, μm "^2)) +
             theme_minimal() +
             theme(
               panel.grid = element_blank(),
@@ -339,32 +310,16 @@ exp2_rotifer_growth <- exp2_growthcurves %>%
 exp2_protist_growth <- exp2_growthcurves %>%
   filter(species == "protist")
 
-protist_nocomp <- exp2_growth_summary_protist %>%
-  filter(competition == FALSE) %>%
-  group_by(currentTemp, repNum) %>%
-  summarize(r_nocomp = mean(r_day), .groups = "drop")
-protist_comp <- exp2_growth_summary_protist %>%
-  filter(competition == TRUE) %>%
-  group_by(evolvedTemp, currentTemp, repNum) %>%
-  summarize(r_comp = mean(r_day), .groups = "drop")
-protist_delta <- protist_comp %>%
-  left_join(protist_nocomp, by = c("currentTemp", "repNum")) %>%
-  mutate(delta_r_protist = r_comp - r_nocomp)
 
-rotifer_comp <- exp2_growth_summary_rotifer %>%
-  filter(competition == "Present") %>%
-  group_by(evolvedTemp, currentTemp, repNum) %>%
-  summarize(
-    r = mean(r_day),
-    .groups = "drop"
-  )
+exp2_bodysize <- exp2_bodysize %>%
+  separate(image_name, into = c("temp_rep", "origin_filetype", "origin_filename", "image_name", "image_filetype"), 
+           sep = "\\.", convert = TRUE) %>%
+  separate(temp_rep, into = c("temperature", "replicate"), sep = "_", convert = TRUE) %>%
+  select(temperature, replicate, area_px) %>%
+  mutate(across(c(temperature, replicate), factor)) %>%
+  filter(area_px > 500) %>%# removes a single erroneously misidentified object ~ 100px^2
+  mutate(area_um = area_px * (200 / 139)^2)
 
-combo_data <- rotifer_comp %>%
-  left_join(protist_delta %>% select(evolvedTemp, currentTemp, repNum, delta_r_protist),
-            by = c("evolvedTemp", "currentTemp", "repNum")) %>%
-  mutate(evolvedTemp_effect = if_else(as.character(evolvedTemp) == "30", 0.5, -0.5),
-         currentTemp_effect = if_else(as.character(currentTemp) == "30", 0.5, -0.5))
-  
 ```
 
 ### Growth Models
@@ -372,6 +327,29 @@ combo_data <- rotifer_comp %>%
 ```{r exp2logistic}
 
 library(growthrates)
+
+# helper for plotting models
+plot_exp2_models <- function(models) {
+  coefs <- as.data.frame(coef(models))
+  model_ids <- c(1:length(coefs$y0))
+  
+  n <- length(model_ids)
+  columns <- floor(sqrt(n))
+  rows <- ceiling(n / columns)
+  par(mfrow = c(columns, rows), mar = c(1, 1, 1, 1))
+  
+  for (i in seq_along(model_ids)) {
+    plot(models[[i]])
+    
+    this_r <- round(coefs$r[i], 6)
+    this_a <- round(coefs$alpha[i], 6)
+    this_model <- rownames(coefs)[i]
+    
+    mtext(this_model, side = 3, adj = 0.1, line = -1, cex = 0.5)
+    mtext(paste("r:", this_r), side = 3, adj = 0.1, line = -2, cex = 0.5)
+    mtext(paste("a:", this_a), side = 3, adj = 0.1, line = -2, cex = 0.5)
+  }
+}
 
 # user-specified model
 logistic_alpha_function <- function(time, parms) {
@@ -407,6 +385,7 @@ exp2_growth_models_protist <- all_growthmodels(
     FUN   = grow_logistic_alpha
 )
 
+# model summaries
 
 exp2_growth_summary_rotifer <- results(exp2_growth_models_rotifer) %>%
   rownames_to_column(var = "id") %>%
@@ -416,7 +395,7 @@ exp2_growth_summary_rotifer <- results(exp2_growth_models_rotifer) %>%
   mutate(across(c(evolvedTemp, currentTemp, competition, replicate), factor),
          r_hour = r, r_day = r * 24,
          alpha_hour = alpha, alpha_day = alpha * 24,
-         K = r_day / alpha_day,
+         K = (r_day / alpha_day) * 10, # x10 is to convert from 0.1ml to 1ml
          competition = case_when(competition == TRUE ~ "Present",
                                  competition == FALSE ~ "Absent"))
 
@@ -432,7 +411,7 @@ exp2_growth_summary_protist <- results(exp2_growth_models_protist) %>%
            competition == FALSE ~ "no-comp"),
          r_hour = r, r_day = r * 24,
          alpha_hour = alpha, alpha_day = alpha * 24,
-         K = r_day / alpha_day)
+         K = (r_day / alpha_day) * 10) # x10 is to convert from 0.1ml to 1ml
 
 ```
 
@@ -440,6 +419,8 @@ exp2_growth_summary_protist <- results(exp2_growth_models_protist) %>%
 
 ```{r exp2lm}
 
+library(lme4)
+library(lmerTest)
 library(car)
 library(moments)
 library(emmeans)
@@ -593,11 +574,33 @@ Anova(exp2_lm_protist_eq, type = "III")
 emm_protist_eq_CuxCo <- emmeans(exp2_lm_protist_eq, ~ currentTemp | compFactor)
 emm_protist_eq_CoxCu <- emmeans(exp2_lm_protist_eq, ~ compFactor | currentTemp)
 
+pairs(emm_protist_eq_CuxCo)
+pairs(emm_protist_eq_CoxCu)
 
-### Mechanism: protist delta and rotifer r
+### Rotifer size
 
-exp2_lmm_mech <- lmer(delta_r_protist ~ r * currentTemp_effect + evolvedTemp_effect + (1|repNum), data = combo_data, REML = FALSE)
+hist(exp2_bodysize$area_um)
+qqp(exp2_bodysize$area_um, 'norm')
 
+hist(log(exp2_bodysize$area_um))
+qqp(log(exp2_bodysize$area_um), 'norm')
+
+exp2_lmm_log_size <- lmerTest::lmer(log(area_um) ~ temperature + 
+                            (1|temperature:replicate), data = exp2_bodysize)
+
+exp2_lm_log_size <- lm(log(area_um) ~ temperature, data = exp2_bodysize)
+
+anova(exp2_lmm_log_size,exp2_lm_log_size)
+
+anova(exp2_lm_log_size)
+Anova(exp2_lm_log_size, type = "III")
+
+plot(exp2_lmm_log_size)
+qqp(resid(exp2_lmm_log_size))
+hist(resid(exp2_lmm_log_size), breaks = 30)
+
+summary(exp2_lmm_log_size)
+Anova(exp2_lmm_log_size, type = "III")
 
 ```
 
@@ -606,6 +609,14 @@ exp2_lmm_mech <- lmer(delta_r_protist ~ r * currentTemp_effect + evolvedTemp_eff
 ### Table Exports
 
 ```{r tables}
+
+table2.x <- results(exp2_growth_models_rotifer) %>%
+  summarize(meanr2 = mean(r2),
+            sdr2 = sd(r2))
+
+table2.y <- results(exp2_growth_models_protist) %>%
+  summarize(meanr2 = mean(r2),
+            sdr2 = sd(r2))
 
 table2.1 <- Anova(exp2_lm_rotifer_log_r, type = "III")
 
@@ -683,21 +694,25 @@ g_protists <- exp2_growth_summary_protist %>%
 
 ```{r fig2 code}
 
-fig2a_data <- as.data.frame(emmeans(exp2_lm_rotifer_log_r, ~ evolvedTemp * currentTemp * competition))
+fig2a_data <- as.data.frame(emmeans(exp2_lm_rotifer_log_r, ~ evolvedTemp * currentTemp * competition)) %>%
+  mutate(currentTemp = recode_factor(currentTemp, "25" = "Contemporary 25°C", "30" = "Contemporary 30°C"),
+         evolvedTemp = recode_factor(evolvedTemp, "25" = "25°C", "30" = "30°C"))
 
-fig2a <- ggplot(fig2a_data, aes(x = competition, y = emmean, color = evolvedTemp, group = evolvedTemp)) +
+fig2a <- ggplot(fig2a_data, aes(x = competition, y = emmean, color = evolvedTemp, shape = evolvedTemp, group = evolvedTemp)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
                           aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~currentTemp) +
-            labs(x = "Competition", y = "ln(Intrinsic growth rate)") +
+            labs(x = "Competition", y = expression("Rotifer growth rate, ln("*italic(r)*")"),
+                 color = "History of Temp") +
             theme_minimal() +
             scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+            guides(shape = "none") +
             theme(
               panel.grid = element_blank(),
               panel.border = element_rect(linewidth = 0.5),
-              legend.position = "none"
+              legend.position = "bottom"
               )
 
 fig2at <- ggplot(fig2a_data, aes(x = competition, y = emmean, color = evolvedTemp, group = evolvedTemp)) +
@@ -750,56 +765,111 @@ fig2a_combo <- ggplot(fig2a_combo_data, aes(x = competition, y = emmean, group =
               )
 
 
-fig2b_data <- as.data.frame(emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp * currentTemp * competition))
+fig2b_data <- as.data.frame(emmeans(exp2_lm_rotifer_alpha, ~ evolvedTemp * currentTemp * competition)) %>%
+  mutate(currentTemp = recode_factor(currentTemp, "25" = "Contemporary 25°C", "30" = "Contemporary 30°C"),
+           evolvedTemp = recode_factor(evolvedTemp, "25" = "25°C", "30" = "30°C"))
 
-fig2b <- ggplot(fig2b_data, aes(x = competition, y = emmean, color = evolvedTemp, group = evolvedTemp)) +
+fig2b <- ggplot(fig2b_data, aes(x = competition, y = emmean, color = evolvedTemp, shape = evolvedTemp, group = evolvedTemp)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
                           aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
             facet_wrap(~currentTemp) +
-            labs(x = "Competition", y = "Intraspecific competition coefficient (α)") +
+            labs(x = "Competition", y = "Rotifer crowding coefficient, ln(α)",
+                 color = "History of Temp") +
             theme_minimal() +
+            guides(shape = "none") +
             scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
             theme(
               panel.grid = element_blank(),
               panel.border = element_rect(linewidth = 0.5),
-              legend.position = "none"
+              legend.position = "bottom"
               )
 
 
-fig2c_data <- as.data.frame(emmeans(exp2_lm_protist_log_r, ~ currentTemp * compFactor))
+fig2c_data <- as.data.frame(emmeans(exp2_lm_protist_log_r, ~ currentTemp * compFactor)) %>%
+  mutate(currentTemp = recode_factor(currentTemp, "25" = "25°C", "30" = "30°C"),
+         compFactor = recode_factor(compFactor, "25-evol-rotif" = "Rotifers evo 25°C", "30-evol-rotif" = "Rotifers evo 30°C",
+                                     "no-comp" = "Protists only"))
 
-fig2c <- ggplot(fig2c_data, aes(x = currentTemp, y = emmean, color = compFactor, group = compFactor)) +
+fig2c <- ggplot(fig2c_data, aes(x = currentTemp, y = emmean, color = compFactor, shape = compFactor, group = compFactor)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
                           aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
-            labs(x = "Temperature", y = "ln(Intrinsic growth rate, r)") +
+            labs(x = "Contemporary Temperature", y = expression("Protist growth rate, ln("*italic(r)*")"),
+                 color = "Competition with:", shape = "Competition with:") +
             theme_minimal() +
             scale_color_manual(values = c("#1BB6AF", "#E9A17C", "lightgreen")) +
             theme(
               panel.grid = element_blank(),
               panel.border = element_rect(linewidth = 0.5),
-              legend.position = "none"
+              legend.position = "bottom"
               )
 
 
-fig2d_data <- as.data.frame(emmeans(exp2_lm_protist_log_alpha, ~ currentTemp * compFactor))
+fig2d_data <- as.data.frame(emmeans(exp2_lm_protist_log_alpha, ~ currentTemp * compFactor)) %>%
+    mutate(currentTemp = recode_factor(currentTemp, "25" = "25°C", "30" = "30°C"),
+         compFactor = recode_factor(compFactor, "25-evol-rotif" = "Rotifers evo 25°C", 
+                                    "30-evol-rotif" = "Rotifers evo 30°C", "no-comp" = "Protists only"))
 
-fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = emmean, color = compFactor, group = compFactor)) +
+fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = emmean, color = compFactor, shape = compFactor, group = compFactor)) +
             geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
             geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
                           aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
             geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
-            labs(x = "Temperature", y = "ln(Intraspecific competition coefficient, α)") +
+            labs(x = "Contemporary Temperature", y = "Protist crowding coefficient, ln(α)",
+                 shape = "Competition with:", color = "Competition with:") +
             theme_minimal() +
             scale_color_manual(values = c("#1BB6AF", "#E9A17C", "lightgreen")) +
             theme(
               panel.grid = element_blank(),
               panel.border = element_rect(linewidth = 0.5),
-              legend.position = "none"
+              legend.position = "bottom"
               )
+
+fig2e_data <-as.data.frame(emmeans(exp2_lm_rotifer_eq, ~ evolvedTemp * currentTemp * competition)) %>%
+  mutate(currentTemp = recode_factor(currentTemp, "25" = "Contemporary 25°C", "30" = "Contemporary 30°C"),
+           evolvedTemp = recode_factor(evolvedTemp, "25" = "25°C", "30" = "30°C"))
+
+fig2e <- ggplot(fig2e_data, aes(x = competition, y = emmean, color = evolvedTemp, shape = evolvedTemp, group = evolvedTemp)) +
+            geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
+            geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
+            geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+            facet_wrap(~currentTemp) +
+            labs(x = "Competition", y = expression("Rotifer realized equilibrium, "*italic(hat(N))*" ml "^-1),
+                 color = "History of Temp") +
+            theme_minimal() +
+            guides(shape = "none") +
+            scale_color_manual(values = c("#1BB6AF", "#E9A17C")) +
+            theme(
+              panel.grid = element_blank(),
+              panel.border = element_rect(linewidth = 0.5),
+              legend.position = "bottom"
+              )
+
+fig2f_data <-as.data.frame(emmeans(exp2_lm_protist_eq, ~ currentTemp * compFactor)) %>%
+  mutate(currentTemp = recode_factor(currentTemp, "25" = "Contemporary 25°C", "30" = "Contemporary 30°C"),
+         compFactor = recode_factor(compFactor, "25-evol-rotif" = "Rotifers evo 25°C", 
+                                    "30-evol-rotif" = "Rotifers evo 30°C", "no-comp" = "Protists only"))
+
+fig2f <- ggplot(fig2f_data, aes(x = currentTemp, y = emmean, color = compFactor, shape = compFactor, group = compFactor)) +
+            geom_point(stat = "identity", position = position_dodge(width = 0.1)) +
+            geom_errorbar(stat = "identity", position = position_dodge(width = 0.1),
+                          aes(ymin = emmean - SE, ymax = emmean + SE), width = 0.15) +
+            geom_line(stat = "identity", position = position_dodge(width = 0.1)) +
+            labs(x = "Contemporary Temperature", y = expression("Protist realized equilibrium, "*italic(hat(N))*" ml "^-1),
+                 color = "Competition with:") +
+            theme_minimal() +
+            guides(shape = "none") +
+            scale_color_manual(values = c("#1BB6AF", "#E9A17C", "lightgreen")) +
+            theme(
+              panel.grid = element_blank(),
+              panel.border = element_rect(linewidth = 0.5),
+              legend.position = "bottom"
+              )
+
 
 ```
 
@@ -807,11 +877,11 @@ fig2d <- ggplot(fig2d_data, aes(x = currentTemp, y = emmean, color = compFactor,
 
 ```{r fig2 export}
 
-fig2_names <- c("fig2a_combo")
+fig2_names <- c("fig2e", "fig2f")
 fig2 <- mget(fig2_names)
 
 iwalk(fig2, ~ ggsave(
-  filename = paste0(.y, ".pdf"),
+  filename = paste0(.y, ".tiff"),
   plot     = .x,
   width    = 6,
   height   = 4,

@@ -1,0 +1,531 @@
+---
+title: "Lotka-Volterra Competition Analysis"
+author: ""
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Overview
+
+This analysis fits a two-species Lotka-Volterra competition model to paired
+rotifer (*Habrotrocha rosa*) and protist (*Tetrahymena*) growth curves from
+the competition experiment. For each competition replicate, four parameters
+are estimated:
+
+- `a_RR`: rotifer intraspecific crowding coefficient
+- `a_RP`: per-capita effect of protists on rotifers (interspecific)
+- `a_PP`: protist intraspecific crowding coefficient
+- `a_PR`: per-capita effect of rotifers on protists (interspecific)
+
+Intrinsic growth rates (`r_R`, `r_P`) are fixed at values estimated from
+single-species monocultures, varying by treatment combination.
+
+The ODE system fit is the Mallet (2012) form:
+
+$$\frac{dN_R}{dt} = N_R (r_R - \alpha_{RR} N_R - \alpha_{RP} N_P)$$
+$$\frac{dN_P}{dt} = N_P (r_P - \alpha_{PP} N_P - \alpha_{PR} N_R)$$
+
+# Setup
+
+```{r libraries}
+library(deSolve)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(purrr)
+library(stringr)
+
+# Reproducibility
+set.seed(42)
+```
+
+# Load data
+
+```{r load_data}
+# EDIT: point this to wherever you have exp2_growthcurves saved
+# load("path/to/exp2_growthcurves.RData")
+
+# Assuming exp2_growthcurves is already loaded in your environment:
+gc <- exp2_growthcurves
+
+# Sanity check structure
+str(gc)
+table(gc$species, gc$competition)
+table(gc$treatID)
+```
+
+# Data prep
+
+Convert counts to per-mL densities and reshape so each row is a single
+timepoint with both species' densities.
+
+```{r data_prep}
+# Confirm `count` is already converted to per-0.1-mL (counts column should
+# equal fullSlide where fullSlide is non-NA, or singlePass * 6.8 where it is).
+# This check is sanity only; if it fails, the conversion needs to happen here.
+
+check_conversion <- gc %>%
+  mutate(
+    expected = case_when(
+      !is.na(fullSlide)  ~ as.numeric(fullSlide),
+      !is.na(singlePass) ~ singlePass * 6.8,
+      TRUE               ~ NA_real_
+    ),
+    diff = abs(count - expected)
+  ) %>%
+  summarise(
+    max_diff = max(diff, na.rm = TRUE),
+    n_mismatches = sum(diff > 0.01, na.rm = TRUE)
+  )
+print(check_conversion)
+
+# Counts in `count` are per 0.1 mL; convert to per mL
+gc <- gc %>%
+  mutate(density_per_ml = count * 10)
+
+# Keep only competition treatments (treatID ending in "RP")
+comp_data <- gc %>%
+  filter(str_ends(treatID, "RP"))
+
+# Reshape so each row has both species' densities at each timepoint
+comp_wide <- comp_data %>%
+  select(day, evolvedTemp, currentTemp, treatID, repNum, species, density_per_ml) %>%
+  pivot_wider(names_from = species, values_from = density_per_ml,
+              names_prefix = "N_") %>%
+  rename(N_R = N_rotifer, N_P = N_protist) %>%
+  arrange(treatID, repNum, day)
+
+head(comp_wide)
+```
+
+# Set up r values
+
+These come from monoculture fits. Hourly rates converted to per-day.
+
+```{r r_values}
+# Rotifer r by evolved x current temperature (hourly -> daily)
+r_rotifer_lookup <- tribble(
+  ~evolvedTemp, ~currentTemp, ~r_R_hourly,
+  "25", "25", 0.0203,
+  "25", "30", 0.0332,
+  "30", "25", 0.0193,
+  "30", "30", 0.0294
+) %>%
+  mutate(r_R = r_R_hourly * 24)
+
+# Protist r by current temperature only (hourly -> daily)
+r_protist_lookup <- tribble(
+  ~currentTemp, ~r_P_hourly,
+  "25", 0.0695,
+  "30", 0.214
+) %>%
+  mutate(r_P = r_P_hourly * 24)
+
+# Single-species alphas (monoculture). Also hourly; will convert as needed.
+# Used as initial guesses for fitting, not as fixed values.
+a_rotifer_lookup <- tribble(
+  ~evolvedTemp, ~currentTemp, ~a_RR_hourly,
+  "25", "25", 0.000305,
+  "25", "30", 0.000436,
+  "30", "25", 0.000318,
+  "30", "30", 0.000435
+) %>%
+  mutate(a_RR_init = a_RR_hourly * 24)
+
+a_protist_lookup <- tribble(
+  ~currentTemp, ~a_PP_hourly,
+  "25", 0.0000675,
+  "30", 0.000315
+) %>%
+  mutate(a_PP_init = a_PP_hourly * 24)
+
+print(r_rotifer_lookup)
+print(r_protist_lookup)
+print(a_rotifer_lookup)
+print(a_protist_lookup)
+```
+
+# LV model definition
+
+```{r lv_model}
+# Two-species Lotka-Volterra in Mallet form
+lv_model <- function(t, state, parms) {
+  N_R <- state["N_R"]
+  N_P <- state["N_P"]
+
+  dN_R <- N_R * (parms["r_R"] - parms["a_RR"] * N_R - parms["a_RP"] * N_P)
+  dN_P <- N_P * (parms["r_P"] - parms["a_PP"] * N_P - parms["a_PR"] * N_R)
+
+  list(c(dN_R = dN_R, dN_P = dN_P))
+}
+
+# Simulate the LV system given parameters and timepoints
+simulate_lv <- function(params, times, N_R0 = 40, N_P0 = 80) {
+  state0 <- c(N_R = N_R0, N_P = N_P0)
+  out <- tryCatch(
+    ode(y = state0, times = times, func = lv_model, parms = params,
+        method = "lsoda"),
+    error = function(e) NULL
+  )
+  if (is.null(out)) return(NULL)
+  as.data.frame(out)
+}
+
+# Negative log-likelihood for one replicate (Gaussian errors on log scale)
+# Estimating four parameters: a_RR, a_RP, a_PP, a_PR (r values fixed)
+nll_lv <- function(log_params, data, r_R, r_P, N_R0 = 40, N_P0 = 80) {
+  # Exponentiate to enforce positivity
+  params <- c(
+    r_R  = r_R,
+    r_P  = r_P,
+    a_RR = exp(log_params[1]),
+    a_RP = exp(log_params[2]),
+    a_PP = exp(log_params[3]),
+    a_PR = exp(log_params[4])
+  )
+
+  times <- sort(unique(data$day))
+  sim_times <- if (min(times) > 0) c(0, times) else times
+  sim <- simulate_lv(params, times = sim_times,
+                     N_R0 = N_R0, N_P0 = N_P0)
+  if (is.null(sim)) return(1e10)
+
+  # Rename simulation outputs to avoid column-name collision on join
+  sim <- sim %>%
+    rename(sim_N_R = N_R, sim_N_P = N_P)
+
+  # Match simulation timepoints to data
+  matched <- data %>%
+    left_join(sim, by = c("day" = "time")) %>%
+    filter(!is.na(sim_N_R), !is.na(sim_N_P))
+
+  if (nrow(matched) == 0) return(1e10)
+
+  # Penalize numerical failures (NaN, Inf) explicitly
+  if (any(!is.finite(matched$sim_N_R)) || any(!is.finite(matched$sim_N_P))) {
+    return(1e10)
+  }
+
+  # Log-space residuals; add 1 to avoid log(0). Rotifer and protist residuals
+  # contribute equally (could be weighted by species-specific variance).
+  resid_R <- log(matched$N_R + 1) - log(pmax(matched$sim_N_R, 0) + 1)
+  resid_P <- log(matched$N_P + 1) - log(pmax(matched$sim_N_P, 0) + 1)
+
+  ssq <- sum(resid_R^2, na.rm = TRUE) + sum(resid_P^2, na.rm = TRUE)
+  if (!is.finite(ssq) || length(resid_R) == 0) return(1e10)
+  ssq
+}
+```
+
+The simulation outputs are renamed to `sim_N_R` and `sim_N_P` before joining
+to avoid column-name collision with the observed `N_R` and `N_P`. If your
+data uses different column names for observed densities, update the `rename`
+call and the residual computation accordingly.
+
+# Fit a single replicate (sanity check)
+
+Before batch fitting, run on one replicate to verify the pipeline works.
+
+```{r fit_one_replicate}
+# Pick one replicate to fit as a sanity check
+test_rep <- comp_wide %>%
+  filter(treatID == "E25HRP", repNum == "1") %>%
+  arrange(day)
+
+print(test_rep)
+
+# Get r values for this treatment
+r_R_test <- r_rotifer_lookup %>%
+  filter(evolvedTemp == as.character(test_rep$evolvedTemp[1]),
+         currentTemp == as.character(test_rep$currentTemp[1])) %>%
+  pull(r_R)
+
+r_P_test <- r_protist_lookup %>%
+  filter(currentTemp == as.character(test_rep$currentTemp[1])) %>%
+  pull(r_P)
+
+# Initial parameter guesses (on log scale)
+# Use monoculture alphas as starting points for self-suppression terms
+a_RR_init <- a_rotifer_lookup %>%
+  filter(evolvedTemp == as.character(test_rep$evolvedTemp[1]),
+         currentTemp == as.character(test_rep$currentTemp[1])) %>%
+  pull(a_RR_init)
+
+a_PP_init <- a_protist_lookup %>%
+  filter(currentTemp == as.character(test_rep$currentTemp[1])) %>%
+  pull(a_PP_init)
+
+# Initial guesses for interspecific terms: start small
+log_init <- log(c(a_RR_init, a_RR_init * 0.5, a_PP_init, a_PP_init * 0.5))
+
+fit_test <- optim(
+  par = log_init,
+  fn = nll_lv,
+  data = test_rep,
+  r_R = r_R_test,
+  r_P = r_P_test,
+  N_R0 = 40,
+  N_P0 = 80,
+  method = "Nelder-Mead",
+  control = list(maxit = 5000, reltol = 1e-8)
+)
+
+print(fit_test)
+cat("\nEstimated parameters:\n")
+est_params <- exp(fit_test$par)
+names(est_params) <- c("a_RR", "a_RP", "a_PP", "a_PR")
+print(est_params)
+```
+
+# Visualize the fit
+
+```{r visualize_fit}
+visualize_fit <- function(rep_data, params, r_R, r_P, N_R0 = 40, N_P0 = 80) {
+  full_params <- c(r_R = r_R, r_P = r_P, params)
+  times <- seq(0, max(rep_data$day), length.out = 200)
+  sim <- simulate_lv(full_params, times = times, N_R0 = N_R0, N_P0 = N_P0)
+
+  sim_long <- sim %>%
+    pivot_longer(cols = c(N_R, N_P), names_to = "species", values_to = "density")
+
+  obs_long <- rep_data %>%
+    pivot_longer(cols = c(N_R, N_P), names_to = "species", values_to = "density")
+
+  ggplot() +
+    geom_point(data = obs_long,
+               aes(x = day, y = density, color = species), size = 2) +
+    geom_line(data = sim_long,
+              aes(x = time, y = density, color = species)) +
+    scale_y_continuous(trans = "log10") +
+    labs(x = "Day", y = "Density (per mL, log scale)",
+         title = paste0("LV fit: ", rep_data$treatID[1],
+                       ", rep ", rep_data$repNum[1])) +
+    theme_minimal()
+}
+
+visualize_fit(test_rep, est_params, r_R_test, r_P_test)
+```
+
+# Batch fit all competition replicates
+
+```{r batch_fit}
+fit_lv_one <- function(rep_data) {
+  evol <- as.character(rep_data$evolvedTemp[1])
+  curr <- as.character(rep_data$currentTemp[1])
+
+  r_R <- r_rotifer_lookup %>%
+    filter(evolvedTemp == evol, currentTemp == curr) %>%
+    pull(r_R)
+  r_P <- r_protist_lookup %>%
+    filter(currentTemp == curr) %>%
+    pull(r_P)
+  a_RR_i <- a_rotifer_lookup %>%
+    filter(evolvedTemp == evol, currentTemp == curr) %>%
+    pull(a_RR_init)
+  a_PP_i <- a_protist_lookup %>%
+    filter(currentTemp == curr) %>%
+    pull(a_PP_init)
+
+  log_init <- log(c(a_RR_i, a_RR_i * 0.5, a_PP_i, a_PP_i * 0.5))
+
+  fit <- tryCatch(
+    optim(
+      par = log_init, fn = nll_lv,
+      data = rep_data, r_R = r_R, r_P = r_P,
+      N_R0 = 40, N_P0 = 80,
+      method = "Nelder-Mead",
+      control = list(maxit = 5000, reltol = 1e-8)
+    ),
+    error = function(e) NULL
+  )
+
+  if (is.null(fit) || fit$convergence != 0) {
+    return(tibble(
+      treatID = rep_data$treatID[1], repNum = rep_data$repNum[1],
+      evolvedTemp = evol, currentTemp = curr,
+      a_RR = NA, a_RP = NA, a_PP = NA, a_PR = NA,
+      ssq = NA, converged = FALSE
+    ))
+  }
+
+  est <- exp(fit$par)
+  tibble(
+    treatID = rep_data$treatID[1], repNum = rep_data$repNum[1],
+    evolvedTemp = evol, currentTemp = curr,
+    a_RR = est[1], a_RP = est[2], a_PP = est[3], a_PR = est[4],
+    ssq = fit$value, converged = TRUE
+  )
+}
+
+# Split into list of replicates and fit each
+rep_list <- comp_wide %>%
+  group_by(treatID, repNum) %>%
+  group_split()
+
+fit_results <- map_dfr(rep_list, fit_lv_one)
+
+# Convergence summary
+cat("Total replicates:", nrow(fit_results), "\n")
+cat("Converged:", sum(fit_results$converged), "\n")
+cat("Failed to converge:", sum(!fit_results$converged), "\n\n")
+
+# Distribution of parameter estimates
+fit_results %>%
+  filter(converged) %>%
+  summarise(across(c(a_RR, a_RP, a_PP, a_PR),
+                   list(median = ~ median(.x, na.rm = TRUE),
+                        min = ~ min(.x, na.rm = TRUE),
+                        max = ~ max(.x, na.rm = TRUE))))
+```
+
+# Diagnostics
+
+Visualize a sample of fits across treatments to assess fit quality.
+
+```{r diagnostic_plots}
+sample_fits <- fit_results %>%
+  filter(converged) %>%
+  group_by(treatID) %>%
+  slice_head(n = 2) %>%
+  ungroup()
+
+for (i in seq_len(nrow(sample_fits))) {
+  row <- sample_fits[i, ]
+  rep_data <- comp_wide %>%
+    filter(treatID == row$treatID, repNum == row$repNum)
+  r_R <- r_rotifer_lookup %>%
+    filter(evolvedTemp == row$evolvedTemp, currentTemp == row$currentTemp) %>%
+    pull(r_R)
+  r_P <- r_protist_lookup %>%
+    filter(currentTemp == row$currentTemp) %>%
+    pull(r_P)
+  params <- c(a_RR = row$a_RR, a_RP = row$a_RP,
+              a_PP = row$a_PP, a_PR = row$a_PR)
+  print(visualize_fit(rep_data, params, r_R, r_P))
+}
+```
+
+# Compare to single-species logistic fits
+
+The LV-derived `a_RR` and `a_PP` should be in the ballpark of the single-species
+monoculture alphas if the model is well-identified. Large discrepancies
+suggest either competition is meaningfully altering self-suppression dynamics
+or the LV fit is absorbing variation into the wrong terms.
+
+```{r compare_to_logistic}
+comparison <- fit_results %>%
+  filter(converged) %>%
+  left_join(a_rotifer_lookup, by = c("evolvedTemp", "currentTemp")) %>%
+  left_join(a_protist_lookup, by = "currentTemp") %>%
+  group_by(evolvedTemp, currentTemp) %>%
+  summarise(
+    a_RR_LV_median = median(a_RR),
+    a_RR_mono = first(a_RR_init),
+    a_PP_LV_median = median(a_PP),
+    a_PP_mono = first(a_PP_init),
+    .groups = "drop"
+  )
+print(comparison)
+```
+
+# Treatment-level analysis
+
+ANOVA-style models on the four LV parameters across evolved temperature and
+current temperature.
+
+```{r treatment_analysis}
+fit_clean <- fit_results %>%
+  filter(converged) %>%
+  mutate(
+    evolvedTemp = factor(evolvedTemp),
+    currentTemp = factor(currentTemp),
+    log_a_RR = log(a_RR),
+    log_a_RP = log(a_RP),
+    log_a_PP = log(a_PP),
+    log_a_PR = log(a_PR)
+  )
+
+# Per-capita effect of rotifers on protists
+cat("\n=== a_PR (rotifer effect on protist) ===\n")
+m_PR <- lm(log_a_PR ~ evolvedTemp * currentTemp, data = fit_clean)
+print(car::Anova(m_PR, type = "III"))
+
+# Per-capita effect of protists on rotifers
+cat("\n=== a_RP (protist effect on rotifer) ===\n")
+m_RP <- lm(log_a_RP ~ evolvedTemp * currentTemp, data = fit_clean)
+print(car::Anova(m_RP, type = "III"))
+
+# Rotifer self-suppression
+cat("\n=== a_RR (rotifer self-suppression) ===\n")
+m_RR <- lm(log_a_RR ~ evolvedTemp * currentTemp, data = fit_clean)
+print(car::Anova(m_RR, type = "III"))
+
+# Protist self-suppression
+cat("\n=== a_PP (protist self-suppression) ===\n")
+m_PP <- lm(log_a_PP ~ evolvedTemp * currentTemp, data = fit_clean)
+print(car::Anova(m_PP, type = "III"))
+```
+
+# Coexistence analysis
+
+For each treatment, check the standard coexistence condition: stable
+coexistence in two-species Lotka-Volterra requires intraspecific competition
+to exceed interspecific competition for both species. This translates to:
+$\alpha_{RR}/\alpha_{PR} > \alpha_{RP}/\alpha_{PP}$ (rotifer can invade
+protist) and the reverse.
+
+```{r coexistence}
+coex <- fit_clean %>%
+  mutate(
+    rotifer_invades = a_RR / a_PR,   # > 1 means rotifer self-limits more
+                                     # than it limits protists
+    protist_invades = a_PP / a_RP,   # > 1 means protist self-limits more
+                                     # than it limits rotifers
+    coexistence = rotifer_invades > 1 & protist_invades > 1
+  ) %>%
+  group_by(evolvedTemp, currentTemp) %>%
+  summarise(
+    n_replicates = n(),
+    median_rotifer_invades = median(rotifer_invades),
+    median_protist_invades = median(protist_invades),
+    n_predicting_coexistence = sum(coexistence),
+    .groups = "drop"
+  )
+print(coex)
+```
+
+# Save results
+
+```{r save_results}
+saveRDS(fit_results, "lv_fit_results.rds")
+saveRDS(fit_clean, "lv_fit_clean.rds")
+```
+
+# Notes and caveats
+
+1. **Fixed r values**: The model fixes intrinsic growth rates at monoculture
+   estimates. If rotifers or protists have systematically different growth
+   rates under competition for reasons beyond resource depletion (e.g.,
+   chemical interference, behavioral changes), those effects will be
+   absorbed into the alpha estimates, biasing them.
+
+2. **Identifiability**: Two-species LV with four free alphas has known
+   identifiability issues, especially when one species' density is much
+   higher than the other or when the dynamics don't show strong feedback.
+   Watch for cases where standard errors of estimates are very wide.
+
+3. **Initial conditions**: Assumed at 40 rotifers/mL and 80 protists/mL.
+   If actual starting densities varied across replicates, this will
+   introduce error.
+
+4. **Time units**: All rates and alphas are now on per-day units. If the
+   original fitting was per-hour and the data is per-day, this needs to be
+   consistent throughout.
+
+5. **Convergence**: Replicates that fail to converge are dropped. If many
+   fail, consider trying different initial values or a different optimizer
+   (e.g., L-BFGS-B with explicit bounds).
