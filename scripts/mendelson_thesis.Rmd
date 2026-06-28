@@ -195,15 +195,28 @@ Anova(exp1_lmm_log_r_2, type = "III", test.statistic = "F")
 
 ### Body size:
 
-# raw data for variance components
-exp1_lmm_size <- lmer(area_px ~ 
+# exp1_lmm_size <- lmer(area_px ~ 
+#                        Tr + 
+#                        (1 | site) + 
+#                        (1 | site:leaf) + 
+#                        (1 | site:leaf:clone), 
+#                     data = exp1_bodysize)
+# 
+# summary(exp1_lmm_size)
+
+# exp1_lmm_size_no_site <- lmer(area_px ~ 
+#                        Tr + 
+#                        (1 | site:leaf) + 
+#                        (1 | site:leaf:clone), 
+#                     data = exp1_bodysize)
+# anova(exp1_lmm_size, exp1_lmm_size_no_site)
+
+exp1_lmm_size_no_leaf <- lmer(area_px ~ 
                        Tr + 
-                       (1 | site) + 
-                       (1 | site:leaf) + 
+                       (1 | site) +
                        (1 | site:leaf:clone), 
                     data = exp1_bodysize)
-
-summary(exp1_lmm_size)
+anova(exp1_lmm_size, exp1_lmm_size_no_leaf)
 
 hist(exp1_bodysize$area_um)
 hist(sqrt(exp1_bodysize$area_um))
@@ -319,7 +332,10 @@ exp2_bodysize <- exp2_bodysize %>%
   select(temperature, replicate, area_px) %>%
   mutate(across(c(temperature, replicate), factor)) %>%
   filter(area_px > 500) %>%# removes a single erroneously misidentified object ~ 100px^2
-  mutate(area_um = area_px * (200 / 139)^2)
+  mutate(area_um = area_px * (200 / 139)^2) #convert to um using meas. of hemocyt. image
+
+exp2_initial_bodysize <- exp1_bodysize %>%
+  select(temperature, clone, area_um)
 
 ```
 
@@ -602,6 +618,29 @@ hist(resid(exp2_lmm_log_size), breaks = 30)
 
 summary(exp2_lmm_log_size)
 Anova(exp2_lmm_log_size, type = "III")
+
+### Size comparison with initial
+
+initial_equal_weighted_size <- exp2_initial_bodysize %>%
+  group_by(clone) %>%
+  summarize(clone_mean = mean(area_um)) %>%
+  summarize(mean = mean(clone_mean),
+            se = sd(clone_mean) / sqrt(n()),
+            n = n())
+
+t.test(exp2_bodysize %>% filter(temperature == 25) %>% pull(area_um),
+       initial_size,
+       alternative = "two.sided")
+
+t.test(exp2_bodysize %>% filter(temperature == 30) %>% pull(area_um),
+       initial_size,
+       alternative = "two.sided")
+
+t.test(area_um ~ temperature, data = exp2_bodysize)
+
+### Growth rate comparison with initial
+
+
 
 ```
 
